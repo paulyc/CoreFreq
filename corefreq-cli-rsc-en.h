@@ -150,6 +150,8 @@
 
 #define RSC_LAYOUT_FOOTER_SYSTEM_CODE_EN				\
 {									\
+	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',			\
+	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',			\
 	'T','a','s','k','s',' ','[',' ',' ',' ',' ',' ',' ',']',	\
 	' ','M','e','m',' ','[',' ',' ',' ',' ',' ',' ',' ',' ',	\
 	' ','/',' ',' ',' ',' ',' ',' ',' ',' ',' ','K','B',']' 	\
@@ -301,7 +303,14 @@
 #define RSC_PERF_MON_LOW_CSTATE_CODE_EN (ASCII*) "Lowest C-State"
 #define RSC_PERF_MON_IOMWAIT_CODE_EN	(ASCII*) "I/O MWAIT Redirection"
 #define RSC_PERF_MON_MAX_CSTATE_CODE_EN (ASCII*) "Max C-State Inclusion"
-#define RSC_PERF_MON_MWAIT_CTRS_CODE_EN (ASCII*) "MWAIT States"
+
+#define RSC_PERF_MON_MONITOR_MWAIT_CODE_EN				\
+					(ASCII*) "MONITOR/MWAIT"
+#define RSC_PERF_MON_MWAIT_IDX_CSTATE_CODE_EN				\
+					(ASCII*) "State index"
+#define RSC_PERF_MON_MWAIT_SUB_CSTATE_CODE_EN				\
+					(ASCII*) "Sub C-State"
+
 #define RSC_PERF_MON_CORE_CYCLE_CODE_EN (ASCII*) "Core Cycles"
 #define RSC_PERF_MON_INST_RET_CODE_EN	(ASCII*) "Instructions Retired"
 #define RSC_PERF_MON_REF_CYCLE_CODE_EN	(ASCII*) "Reference Cycles"
@@ -408,7 +417,8 @@
 #define RSC_MENU_ITEM_VIEW_CODE_EN	(ASCII*) "          View          "
 #define RSC_MENU_ITEM_WINDOW_CODE_EN	(ASCII*) "         Window         "
 #define RSC_MENU_ITEM_SETTINGS_CODE_EN	(ASCII*) " Settings           [s] "
-#define RSC_MENU_ITEM_KERNEL_CODE_EN	(ASCII*) " Kernel Data        [k] "
+#define RSC_MENU_ITEM_SMBIOS_CODE_EN	(ASCII*) " SMBIOS data        [B] "
+#define RSC_MENU_ITEM_KERNEL_CODE_EN	(ASCII*) " Kernel data        [k] "
 #define RSC_MENU_ITEM_HOTPLUG_CODE_EN	(ASCII*) " HotPlug CPU        [#] "
 #define RSC_MENU_ITEM_TOOLS_CODE_EN	(ASCII*) " Tools             [F3] "
 #define RSC_MENU_ITEM_ABOUT_CODE_EN	(ASCII*) " About              [a] "
@@ -522,6 +532,8 @@
 			(ASCII*) " [Ctrl]+[p]                      Copy "
 #define RSC_ADV_HELP_ITEM_REC_SCR_CODE_EN				\
 			(ASCII*) " [Alt]+[p]                     Record "
+#define RSC_ADV_HELP_ITEM_FAHR_CELS_CODE_EN				\
+			(ASCII*) " F              Fahrenheit or Celsius "
 
 #define RSC_TURBO_CLOCK_TITLE_CODE_EN	(ASCII*) " Turbo Clock %1dC "
 #define RSC_RATIO_CLOCK_TITLE_CODE_EN	(ASCII*) " %s Clock Ratio "
@@ -658,6 +670,7 @@
 		(ASCII*)"CoreFreq."					\
 			"  Copyright (C) 2015-2019 CYRIL INGENIERIE\n\n"\
 			"Usage:\t%s [-option <arguments>]\n"		\
+			"\t-F\tTemperature in Fahrenheit\n"		\
 			"\t-t\tShow Top (default)\n"			\
 			"\t-d\tShow Dashboard\n"			\
 			"\t-V\tMonitor Power and Voltage\n"		\
@@ -670,6 +683,7 @@
 			"\t-R\tPrint System Registers\n"		\
 			"\t-m\tPrint Topology\n"			\
 			"\t-u\tPrint CPUID\n"				\
+			"\t-B\tPrint SMBIOS\n"				\
 			"\t-k\tPrint Kernel\n"				\
 			"\t-h\tPrint out this message\n"		\
 			"\t-v\tPrint the version number\n"		\
@@ -693,3 +707,5 @@
 #define RSC_BOX_IDLE_LIMIT_TITLE_CODE_EN (ASCII*) " CPU-Idle Limit "
 
 #define RSC_BOX_RECORDER_TITLE_CODE_EN (ASCII*) " Duration "
+
+#define RSC_SMBIOS_TITLE_CODE_EN	(ASCII*) " SMBIOS "

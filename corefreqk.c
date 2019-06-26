@@ -8,6 +8,9 @@
 #include <linux/module.h>
 #include <linux/cpu.h>
 #include <linux/pci.h>
+#ifdef CONFIG_DMI
+#include <linux/dmi.h>
+#endif /* CONFIG_DMI */
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/cdev.h>
@@ -3305,7 +3308,7 @@ unsigned int AMD_Zen_CoreFID(unsigned int COF, unsigned int DID)
 
 void Compute_AMD_Zen_Boost(void)
 {
-	PROCESSOR_SPECIFIC *pSpecific = NULL;
+	PROCESSOR_SPECIFIC *pSpecific = LookupProcessor();
 	unsigned int COF = 0, pstate, sort[8] = { /* P[0..7]-States */
 		BOOST(MAX), BOOST(1C), BOOST(2C), BOOST(3C),
 		BOOST(4C) , BOOST(5C), BOOST(6C), BOOST(7C)
@@ -3313,6 +3316,15 @@ void Compute_AMD_Zen_Boost(void)
 	HWCR HwCfgRegister = {.value = 0};
 	PSTATEDEF PstateDef = {.value = 0};
 
+	if (pSpecific != NULL) {
+		/* Save thermal parameters for later use in the Daemon	*/
+		Arch[Proc->ArchID].Specific[0].Param = pSpecific->Param;
+		/* Override Processor CodeName & Locking capabilities	*/
+		OverrideCodeNameString(pSpecific);
+		OverrideUnlockCapability(pSpecific);
+	} else {
+		Arch[Proc->ArchID].Specific[0].Param.Target = 0;
+	}
 	for (pstate = BOOST(MIN); pstate < BOOST(SIZE); pstate++)
 		Proc->Boost[pstate] = 0;
 
@@ -3338,25 +3350,16 @@ void Compute_AMD_Zen_Boost(void)
 		Proc->Boost[BOOST(CPB)] = Proc->Boost[BOOST(MAX)];
 		Proc->Boost[BOOST(XFR)] = Proc->Boost[BOOST(MAX)];
 
-		Proc->Features.TgtRatio_Unlock = 0;
-
-	    if ((pSpecific = LookupProcessor()) != NULL) {
-		/* Save thermal parameters to compute per Core temperature */
-		Arch[Proc->ArchID].Specific[0].Param = pSpecific->Param;
-
+	    if (pSpecific != NULL) {
 		Proc->Boost[BOOST(CPB)] += pSpecific->Boost[0]; /* Boost */
 
 		Proc->Boost[BOOST(XFR)] += pSpecific->Boost[0]; /* Boost */
 		Proc->Boost[BOOST(XFR)] += pSpecific->Boost[1]; /* XFR */
-
-		OverrideCodeNameString(pSpecific);
-		OverrideUnlockCapability(pSpecific);
-	    } else {
-		Arch[Proc->ArchID].Specific[0].Param.Target = 0;
 	    }
 		Proc->Features.TDP_Levels = 2; /* Count the Xtra Boost ratios */
+	} else {
+		Proc->Features.TDP_Levels = 0; /* Disabled CPB: Hide ratios */
 	}
-	Proc->Boost[BOOST(TGT)] = Proc->Boost[BOOST(MAX)];
 }
 
 typedef struct {
@@ -3364,6 +3367,52 @@ typedef struct {
 	unsigned long long PstateAddr;
 	unsigned int BoostIndex;
 } CLOCK_ZEN_ARG;
+
+void ReCompute_AMD_Zen_Boost(CLOCK_ZEN_ARG *pClockZen)
+{
+	PSTATEDEF PstateDef = {.value = 0};
+	unsigned int COF = 0;
+	/* The target frequency P-State figures as an exception */
+	if (pClockZen->BoostIndex == BOOST(TGT)) {
+		PSTATECTRL PstateCtrl = {.value = 0};
+		RDMSR(PstateCtrl, MSR_AMD_PERF_CTL);
+		RDMSR(PstateDef, pClockZen->PstateAddr + PstateCtrl.PstateCmd);
+	} else {
+		RDMSR(PstateDef, pClockZen->PstateAddr);
+	}
+	COF = AMD_Zen_CoreCOF(	PstateDef.Family_17h.CpuFid,
+				PstateDef.Family_17h.CpuDfsId );
+
+	Proc->Boost[pClockZen->BoostIndex] = COF;
+}
+
+static void TargetClock_AMD_Zen_PerCore(void *arg)
+{
+	CLOCK_ZEN_ARG *pClockZen = (CLOCK_ZEN_ARG *) arg;
+	unsigned int pstate , target = Proc->Boost[pClockZen->BoostIndex]
+					+ pClockZen->pClockMod->Offset;
+    /* Look-up for the first enabled P-State with the same target frequency */
+    for (pstate = 0; pstate <= 7; pstate++) {
+	PSTATEDEF PstateDef = {.value = 0};
+	RDMSR(PstateDef, pClockZen->PstateAddr + pstate);
+
+	if (PstateDef.Family_17h.PstateEn)
+	{
+		unsigned int COF=AMD_Zen_CoreCOF(PstateDef.Family_17h.CpuFid,
+						PstateDef.Family_17h.CpuDfsId);
+
+		if (COF == target) {
+			PSTATECTRL PstateCtrl = {.value = 0};
+			/* Command a new target P-state */
+			RDMSR(PstateCtrl, MSR_AMD_PERF_CTL);
+			PstateCtrl.PstateCmd = pstate;
+			WRMSR(PstateCtrl, MSR_AMD_PERF_CTL);
+
+			return;
+		}
+	}
+    }
+}
 
 static void TurboClock_AMD_Zen_PerCore(void *arg)
 {
@@ -3390,25 +3439,16 @@ static void TurboClock_AMD_Zen_PerCore(void *arg)
 	}
 }
 
-void For_All_AMD_Zen_Clock(CLOCK_ZEN_ARG *pClockZen)
+void For_All_AMD_Zen_Clock(CLOCK_ZEN_ARG *pClockZen, void (*PerCore)(void *))
 {
-	PSTATEDEF PstateDef = {.value = 0};
-	unsigned int cpu = Proc->CPU.Count, COF = 0;
+	unsigned int cpu = Proc->CPU.Count;
+	do {
+		cpu--;	/* From last AP to BSP */
 
-    do {
-	cpu--;	/* From last AP to BSP */
+		if (!BITVAL(KPublic->Core[cpu]->OffLine, OS))
+			smp_call_function_single(cpu, PerCore, pClockZen, 1);
 
-      if (!BITVAL(KPublic->Core[cpu]->OffLine, OS))
-	smp_call_function_single(cpu, TurboClock_AMD_Zen_PerCore, pClockZen, 1);
-
-    } while (cpu != 0) ;
-	/* Re-compute this Boost ratio onto the current CPU */
-	RDMSR(PstateDef, pClockZen->PstateAddr);
-
-	COF = AMD_Zen_CoreCOF(	PstateDef.Family_17h.CpuFid,
-				PstateDef.Family_17h.CpuDfsId);
-
-	Proc->Boost[pClockZen->BoostIndex] = COF;
+	} while (cpu != 0) ;
 }
 
 long TurboClock_AMD_Zen(CLOCK_ARG *pClockMod)
@@ -3422,8 +3462,9 @@ long TurboClock_AMD_Zen(CLOCK_ARG *pClockMod)
 			.BoostIndex = BOOST(SIZE) - pClockMod->NC
 		};
 
-		For_All_AMD_Zen_Clock(&ClockZen);
+		For_All_AMD_Zen_Clock(&ClockZen, TurboClock_AMD_Zen_PerCore);
 
+		ReCompute_AMD_Zen_Boost(&ClockZen);
 		return(2);	/* Report a platform change */
 	    }
 	}
@@ -3432,26 +3473,51 @@ long TurboClock_AMD_Zen(CLOCK_ARG *pClockMod)
 
 long ClockMod_AMD_Zen(CLOCK_ARG *pClockMod)
 {
-	if (Proc->Registration.Experimental  && (pClockMod != NULL)) {
-	    if (pClockMod->NC == CLOCK_MOD_MAX)
+    if (Proc->Registration.Experimental  && (pClockMod != NULL)) {
+	switch (pClockMod->NC) {
+	case CLOCK_MOD_MAX:
 	    {
-		CLOCK_ZEN_ARG ClockZen = {	/* P0:Max non-boosted P-State */
+		CLOCK_ZEN_ARG ClockZen = { /* P[0]:Max non-boosted P-State */
 			.pClockMod  = pClockMod,
 			.PstateAddr = MSR_AMD_PSTATE_DEF_BASE,
 			.BoostIndex = BOOST(MAX)
 		};
 
-		For_All_AMD_Zen_Clock(&ClockZen);
+		For_All_AMD_Zen_Clock(&ClockZen, TurboClock_AMD_Zen_PerCore);
 
+		ReCompute_AMD_Zen_Boost(&ClockZen);
 		return(2);
 	    }
+	case CLOCK_MOD_TGT:
+	    {
+		CLOCK_ZEN_ARG ClockZen = {	/* Target non-boosted P-State */
+			.pClockMod  = pClockMod,
+			.PstateAddr = MSR_AMD_PSTATE_DEF_BASE,
+			.BoostIndex = BOOST(TGT)
+		};
+
+		For_All_AMD_Zen_Clock(&ClockZen, TargetClock_AMD_Zen_PerCore);
+
+		ReCompute_AMD_Zen_Boost(&ClockZen);
+		return(2);
+	    }
+	default:
+		break;
 	}
+    }
 	return(0);
 }
 
 void Query_AMD_Family_17h(void)
 {
+	CLOCK_ZEN_ARG ClockZen = {
+		.pClockMod  = NULL,	/* Unused field at this time	*/
+		.PstateAddr = MSR_AMD_PSTATE_DEF_BASE,
+		.BoostIndex = BOOST(TGT)
+	};
+	Proc->Features.TgtRatio_Unlock = 1; /* Unlock P-state Control	*/
 	Compute_AMD_Zen_Boost();
+	ReCompute_AMD_Zen_Boost(&ClockZen); /* Initial Target P-State value */
 	/* Apply same register bit fields as Intel RAPL_POWER_UNIT */
 	RDMSR(Proc->PowerThermal.Unit, MSR_AMD_RAPL_POWER_UNIT);
 
@@ -3966,7 +4032,7 @@ void Query_AMD_Zen(CORE *Core)					/* Per SMT */
 		PSTATECTRL PStateCtl = {.value = 0};
 		/* Convert the non-boosted P-state into the Target Ratio */
 		RDMSR(PStateCtl, MSR_AMD_PERF_CTL);
-		RDMSR(PstateDef,(MSR_AMD_PSTATE_DEF_BASE+PStateCtl.PstateCmd));
+		RDMSR(PstateDef, MSR_AMD_PSTATE_DEF_BASE + PStateCtl.PstateCmd);
 		/* Is this an enabled P-States ?			*/
 	    if (PstateDef.Family_17h.PstateEn) {
 		unsigned int COF=AMD_Zen_CoreCOF(PstateDef.Family_17h.CpuFid,
@@ -5195,9 +5261,8 @@ void Sys_MemInfo(SYSGATE *SysGate)
 	SysGate->memInfo.freehigh  = info.freehigh  << (PAGE_SHIFT - 10);
 }
 
-#if FEAT_DBG > 0
-    #define Sys_Tick(Pkg)					\
-    ({								\
+#define Sys_Tick(Pkg)						\
+({								\
 	if (Pkg->OS.Gate != NULL) {				\
 		Pkg->tickStep--;				\
 		if (!Pkg->tickStep) {				\
@@ -5206,18 +5271,7 @@ void Sys_MemInfo(SYSGATE *SysGate)
 			Sys_MemInfo(Pkg->OS.Gate);		\
 		}						\
 	}							\
-    })
-#else
-    #define Sys_Tick(Pkg)					\
-    ({								\
-	if (Pkg->OS.Gate != NULL) {				\
-		Pkg->tickStep--;				\
-		if (!Pkg->tickStep) {				\
-			Pkg->tickStep = Pkg->tickReset ;	\
-		}						\
-	}							\
-    })
-#endif
+})
 
 static void InitTimer(void *Cycle_Function)
 {
@@ -5673,6 +5727,16 @@ void AMD_Core_Counters_Clear(CORE *Core)
 	MSR_SNB_UNCORE_PERF_FIXED_CTR0, Proc->Counter[T].Uncore.FC0);	\
 })
 
+#define PKG_Counters_SandyBridge_EP(Core, T)				\
+({									\
+	RDTSCP_COUNTERx5(Proc->Counter[T].PTSC,				\
+			MSR_PKG_C2_RESIDENCY, Proc->Counter[T].PC02,	\
+			MSR_PKG_C3_RESIDENCY, Proc->Counter[T].PC03,	\
+			MSR_PKG_C6_RESIDENCY, Proc->Counter[T].PC06,	\
+			MSR_PKG_C7_RESIDENCY, Proc->Counter[T].PC07,	\
+	MSR_SNB_EP_UNCORE_PERF_FIXED_CTR0, Proc->Counter[T].Uncore.FC0);\
+})
+
 #define PKG_Counters_Haswell_EP(Core, T)				\
 ({									\
 	RDTSCP_COUNTERx5(Proc->Counter[T].PTSC,				\
@@ -6001,25 +6065,18 @@ void Core_AMD_Family_15h_Temp(CORE *Core)
 	}
 }
 
-#define Core_AMD_SMU_Thermal(Core,	TctlRegister,			\
-					SMU_IndexRegister,		\
-					SMU_DataRegister)		\
-({									\
-	TCTL_REGISTER TctlSensor = {0};					\
-									\
-	WRPCI(TctlRegister, SMU_IndexRegister) ;			\
-	RDPCI(TctlSensor, SMU_DataRegister);				\
-									\
-	Core->PowerThermal.Sensor = TctlSensor.CurTmp;			\
-})
-
-/*TODO:	Bulldozer/Excavator [need hardware to test with]
+/*TODO: Bulldozer/Excavator [need hardware to test with]
 void Core_AMD_Family_15_60h_Temp(CORE *Core)
 {
     if (Proc->Registration.Experimental) {
-	Core_AMD_SMU_Thermal(Core,	SMU_AMD_THM_TCTL_REGISTER_F15H,
+	TCTL_REGISTER TctlSensor = {.value = 0};
+
+	Core_AMD_SMN_Read(Core ,	TctlSensor,
+					SMU_AMD_THM_TCTL_REGISTER_F15H,
 					SMU_AMD_INDEX_REGISTER_F15H,
 					SMU_AMD_DATA_REGISTER_F15H);
+
+	Core->PowerThermal.Sensor = TctlSensor.CurTmp;
 
 	if (Proc->Features.AdvPower.EDX.TTP == 1) {
 		THERMTRIP_STATUS ThermTrip = {0};
@@ -6036,9 +6093,25 @@ void Core_AMD_Family_15_60h_Temp(CORE *Core)
 
 void Core_AMD_Family_17h_Temp(CORE *Core)
 {
-	Core_AMD_SMU_Thermal(Core,	SMU_AMD_THM_TCTL_REGISTER_F17H,
-					SMU_AMD_INDEX_REGISTER_F16H,
-					SMU_AMD_DATA_REGISTER_F16H);
+	TCTL_REGISTER TctlSensor = {.value = 0};
+
+	Core_AMD_SMN_Read(Core ,	TctlSensor,
+					SMU_AMD_THM_TCTL_REGISTER_F17H,
+					SMU_AMD_INDEX_REGISTER_F17H,
+					SMU_AMD_DATA_REGISTER_F17H);
+
+	Core->PowerThermal.Sensor = TctlSensor.CurTmp;
+
+	if (TctlSensor.CurTempRangeSel == 1)
+	{
+	/* Register: SMU::THM::THM_TCON_CUR_TMP - Bit 19: CUR_TEMP_RANGE_SEL
+		0 = Report on 0C to 225C scale range.
+		1 = Report on -49C to 206C scale range.
+	*/
+		Core->PowerThermal.Param.Offset[1] = 49;
+	} else {
+		Core->PowerThermal.Param.Offset[1] = 0;
+	}
 }
 
 static enum hrtimer_restart Cycle_GenuineIntel(struct hrtimer *pTimer)
@@ -6654,7 +6727,7 @@ static enum hrtimer_restart Cycle_SandyBridge_EP(struct hrtimer *pTimer)
 		SMT_Counters_SandyBridge(Core, 1);
 
 		if (Core->Bind == Proc->Service.Core) {
-			PKG_Counters_SandyBridge(Core, 1);
+			PKG_Counters_SandyBridge_EP(Core, 1);
 
 			RDMSR(PerfStatus, MSR_IA32_PERF_STATUS);
 			Core->PowerThermal.VID = PerfStatus.SNB.CurrVID;
@@ -6756,7 +6829,7 @@ static void Start_SandyBridge_EP(void *arg)
 
 	if (Core->Bind == Proc->Service.Core) {
 		Start_Uncore_SandyBridge_EP(NULL);
-		PKG_Counters_SandyBridge(Core, 0);
+		PKG_Counters_SandyBridge_EP(Core, 0);
 		PWR_ACCU_SandyBridge_EP(Proc, 0);
 	}
 
@@ -7963,41 +8036,60 @@ static int CoreFreqK_IdleDriver_Init(void)
     {
 	if((CoreFreqK.IdleDevice = alloc_percpu(struct cpuidle_device)) == NULL)
 		rc = -ENOMEM;
-	else {	/* Polling loop						*/
+	else {
+		unsigned int subState[] = {
+			Proc->Features.MWait.EDX.SubCstate_MWAIT0,  /*   C0  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT1,  /*   C1  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT1,  /*  C1E  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT2,  /*   C3  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT3,  /*   C6  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT4,  /*   C7  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT5,  /*   C8  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT6,  /*   C9  */
+			Proc->Features.MWait.EDX.SubCstate_MWAIT7   /*  C10  */
+		};
+		const unsigned int subStateCount = sizeof(subState)
+						 / sizeof(subState[0]);
+		/* Kernel polling loop					*/
 		cpuidle_poll_state_init(&CoreFreqK.IdleDriver);
+
 		CoreFreqK.IdleDriver.state_count = 1;
 		/* Idle States						*/
 	    while (pIdleState->Name != NULL)
 	    {
-		StrCopy(CoreFreqK.IdleDriver.states[
+		if ((CoreFreqK.IdleDriver.state_count < subStateCount)
+		&& (subState[CoreFreqK.IdleDriver.state_count] > 0))
+		{
+			StrCopy(CoreFreqK.IdleDriver.states[
+					CoreFreqK.IdleDriver.state_count
+				].name, pIdleState->Name, CPUIDLE_NAME_LEN);
+
+			StrCopy(CoreFreqK.IdleDriver.states[
+					CoreFreqK.IdleDriver.state_count
+				].desc, pIdleState->Desc, CPUIDLE_NAME_LEN);
+
+			CoreFreqK.IdleDriver.states[
 				CoreFreqK.IdleDriver.state_count
-			].name, pIdleState->Name, CPUIDLE_NAME_LEN);
+			].flags = pIdleState->flags;
 
-		StrCopy(CoreFreqK.IdleDriver.states[
+			CoreFreqK.IdleDriver.states[
 				CoreFreqK.IdleDriver.state_count
-			].desc, pIdleState->Desc, CPUIDLE_NAME_LEN);
+			].exit_latency = pIdleState->Latency;
 
-		CoreFreqK.IdleDriver.states[
-			CoreFreqK.IdleDriver.state_count
-		].flags = pIdleState->flags;
+			CoreFreqK.IdleDriver.states[
+				CoreFreqK.IdleDriver.state_count
+			].target_residency = pIdleState->Residency;
 
-		CoreFreqK.IdleDriver.states[
-			CoreFreqK.IdleDriver.state_count
-		].exit_latency = pIdleState->Latency;
+			CoreFreqK.IdleDriver.states[
+				CoreFreqK.IdleDriver.state_count
+			].enter = CoreFreqK_IdleHandler;
 
-		CoreFreqK.IdleDriver.states[
-			CoreFreqK.IdleDriver.state_count
-		].target_residency = pIdleState->Residency;
+			CoreFreqK.IdleDriver.states[
+				CoreFreqK.IdleDriver.state_count
+			].enter_s2idle = CoreFreqK_S2IdleHandler;
 
-		CoreFreqK.IdleDriver.states[
-			CoreFreqK.IdleDriver.state_count
-		].enter = CoreFreqK_IdleHandler;
-
-		CoreFreqK.IdleDriver.states[
-			CoreFreqK.IdleDriver.state_count
-		].enter_s2idle = CoreFreqK_S2IdleHandler;
-
-		CoreFreqK.IdleDriver.state_count++;
+			CoreFreqK.IdleDriver.state_count++;
+		}
 		pIdleState++;
 	    }
 	    if ((rc = cpuidle_register_driver(&CoreFreqK.IdleDriver)) == 0) {
@@ -9064,6 +9156,41 @@ static struct notifier_block CoreFreqK_notifier_block = {
 #endif /* KERNEL_VERSION(4, 10, 0) */
 #endif /* CONFIG_HOTPLUG_CPU */
 
+void SMBIOS_Collect(void)
+{
+#ifdef CONFIG_DMI
+	struct {
+		enum dmi_field field;
+		char *recipient;
+	} dmi_collect[] = {
+		{ DMI_BIOS_VENDOR,	Proc->SMB.BIOS.Vendor	},
+		{ DMI_BIOS_VERSION,	Proc->SMB.BIOS.Version	},
+		{ DMI_BIOS_DATE,	Proc->SMB.BIOS.Release	},
+		{ DMI_SYS_VENDOR,	Proc->SMB.System.Vendor },
+		{ DMI_PRODUCT_NAME,	Proc->SMB.Product.Name	},
+		{ DMI_PRODUCT_VERSION,	Proc->SMB.Product.Version},
+		{ DMI_PRODUCT_SERIAL,	Proc->SMB.Product.Serial},
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+		{ DMI_PRODUCT_SKU,	Proc->SMB.Product.SKU	},
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+		{ DMI_PRODUCT_FAMILY,	Proc->SMB.Product.Family},
+#endif
+		{ DMI_BOARD_NAME,	Proc->SMB.Board.Name	},
+		{ DMI_BOARD_VERSION,	Proc->SMB.Board.Version },
+		{ DMI_BOARD_SERIAL,	Proc->SMB.Board.Serial	}
+	};
+	size_t count = sizeof(dmi_collect) / sizeof(dmi_collect[0]), idx;
+
+	for (idx = 0; idx < count; idx++) {
+		const char *pInfo = dmi_get_system_info(dmi_collect[idx].field);
+		if ((pInfo != NULL) && (strlen(pInfo) > 0)) {
+			StrCopy(dmi_collect[idx].recipient, pInfo, MAX_UTS_LEN);
+		}
+	}
+#endif /* CONFIG_DMI */
+}
+
 static int __init CoreFreqK_init(void)
 {
 	INIT_ARG iArg={.Features=NULL, .SMT_Count=0, .localProcessor=0, .rc=0};
@@ -9264,6 +9391,10 @@ static int __init CoreFreqK_init(void)
 				Arch[Proc->ArchID].Architecture[0].CodeName,
 				CODENAME_LEN);
 
+			/* Copy various SMBIOS data [version 3.2]	*/
+			SMBIOS_Collect();
+
+			/* Initialize the CoreFreq controller		*/
 			Controller_Init();
 
 			MatchPeerForDefaultService(&Proc->Service,

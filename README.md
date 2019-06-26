@@ -1,6 +1,6 @@
 # CoreFreq
 ## Purpose
-CoreFreq is a CPU monitoring software with BIOS like functionnalities, designed for the 64-bits Processors of architectures Intel Atom, Core2, Nehalem, SandyBridge and superiors; AMD Families 0Fh, 17h (Zen)  
+CoreFreq, a CPU monitoring software with BIOS like functionalities, is designed for the 64-bits Processors of architecture Intel Atom, Core2, Nehalem, SandyBridge and superiors; AMD Families 0Fh, 17h (Zen)  
 
 ![alt text](http://blog.cyring.free.fr/images/CoreFreq_Top.gif "CoreFreq Top")
 
@@ -82,14 +82,27 @@ make[1]: Entering directory '/usr/lib/modules/x.y.z/build'
 make[1]: Leaving directory '/usr/lib/modules/x.y.z/build'
 ```
 
+### Install
+
 ### Start
 
-3. Load the kernel module, as root.  
-:hash:`insmod corefreqk.ko`  
-4. Start the daemon, as root.  
-:hash:`corefreqd`  
-5. Start the client, as a user (_in another terminal or console_).  
-:heavy_dollar_sign:`corefreq-cli`  
+When installed:
+
+3. Load the kernel module, as root.
+:hash:`modprobe corefreqk`
+4. Start the daemon, as root.
+:hash:`systemctl start corefreqd`
+5. Start the client, as a user.
+:heavy_dollar_sign:`corefreq-cli`
+
+When built from source:
+
+3. Load the kernel module, as root.
+:hash:`insmod corefreqk.ko`
+4. Start the daemon, as root.
+:hash:`corefreqd`
+5. Start the client, as a user (_in another terminal or console_).
+:heavy_dollar_sign:`corefreq-cli`
 
 ### Stop
 
@@ -106,7 +119,7 @@ Download the CoreFreq Live CD from the [Wiki](http://github.com/cyring/CoreFreq/
 
 ## Screenshots
 ### Linux kernel module
-Use `dmesg` or `journalctl -k` to check if the module is started
+Use `lsmod`, `dmesg` or `journalctl -k` to check if the module is started
 ```
 CoreFreq: Processor [06_1A] Architecture [Nehalem/Bloomfield] CPU [8/8]
 ```
