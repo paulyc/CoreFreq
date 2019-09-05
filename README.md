@@ -29,16 +29,19 @@ To reach this goal, CoreFreq implements a Linux Kernel module which employs the 
 
 ### Prerequisites
 
-**a-** For a better accuracy, *disable* the Kernel *NMI Watchdog*  
+**a-** _Intel only_: For a better accuracy, *disable* the Kernel *NMI Watchdog*  
 
-Add the below parameter in the kernel boot loader (Grub, SysLinux)  
-The NMI Watchdog and the CoreFreq driver are conflicting on the ownership of the fixed performance counters  
+Add the below parameter in the kernel boot loader (Grub, SysLinux) ...  
 
 ```
 nmi_watchdog=0
 ```
+... and build with the fixed performance counters  
+```
+make MSR_CORE_PERF_UC=MSR_CORE_PERF_FIXED_CTR1 MSR_CORE_PERF_URC=MSR_CORE_PERF_FIXED_CTR2
+```
 
-**b-** No Virtualization  
+**b-** _AMD and Intel_: No Virtualization  
 
 VMs don't provide access to the registers that the CoreFreq driver employs :
 * Fixed Performance Counters 
@@ -55,7 +58,7 @@ The UI renders best with an ASCII 7-Bit console or Xterm with VT100 and ANSI col
 
 ### Build
 0. Software needed:  
-* GNU C Compiler
+* GNU C Compiler with GNU extensions
 * GNU Make tool
 * Header files for building modules for Linux kernel
 
@@ -164,7 +167,9 @@ CPU     IPS            IPC            CPI
 [corefreq-git](https://aur.archlinux.org/packages/corefreq-git) can be installed from the Arch User Repository.
 
 ## Debian, Ubuntu
- * Development packages prerequisites.  
+ * Installing the DKMS package will pull the Kernel development packages  
+:hash:`apt-get install dkms`  
+ * Or, install selectively the development packages prerequisites.  
 :hash:`apt-get install libpthread-stubs0-dev`  
 
 ## Red Hat, CentOS
@@ -183,12 +188,6 @@ CPU     IPS            IPC            CPI
 nmi_watchdog=0
 ```
 
-  A: a NMI alternative is proposed in the `Makefile` to make use of the `APERF/MPERF` registers  
-
-```
-make help	# for instructions usage
-make info	# for the current settings
-```
 
 * Q: The Processor does not enter the C-States ?  
   A: Check if at least one Idle driver is running.  

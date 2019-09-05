@@ -150,11 +150,9 @@
 
 #define RSC_LAYOUT_FOOTER_SYSTEM_CODE_EN				\
 {									\
-	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',			\
-	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',			\
 	'T','a','s','k','s',' ','[',' ',' ',' ',' ',' ',' ',']',	\
 	' ','M','e','m',' ','[',' ',' ',' ',' ',' ',' ',' ',' ',	\
-	' ','/',' ',' ',' ',' ',' ',' ',' ',' ',' ','K','B',']' 	\
+	' ','/',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ','B',']' 	\
 }
 
 #define RSC_CREATE_HOTPLUG_CPU_ENABLE_CODE_EN	(ASCII*) "[   ENABLE ]"
@@ -413,19 +411,19 @@
 #define RSC_TASKS_SORTBY_PID_CODE_EN	(ASCII*) " PID      "
 #define RSC_TASKS_SORTBY_COMM_CODE_EN	(ASCII*) " Command  "
 
-#define RSC_MENU_ITEM_MENU_CODE_EN	(ASCII*) "          Menu          "
-#define RSC_MENU_ITEM_VIEW_CODE_EN	(ASCII*) "          View          "
-#define RSC_MENU_ITEM_WINDOW_CODE_EN	(ASCII*) "         Window         "
+#define RSC_MENU_ITEM_MENU_CODE_EN	(ASCII*) "     [F2] Menu          "
+#define RSC_MENU_ITEM_VIEW_CODE_EN	(ASCII*) "     [F3] View          "
+#define RSC_MENU_ITEM_WINDOW_CODE_EN	(ASCII*) "    [F4] Window         "
 #define RSC_MENU_ITEM_SETTINGS_CODE_EN	(ASCII*) " Settings           [s] "
 #define RSC_MENU_ITEM_SMBIOS_CODE_EN	(ASCII*) " SMBIOS data        [B] "
 #define RSC_MENU_ITEM_KERNEL_CODE_EN	(ASCII*) " Kernel data        [k] "
 #define RSC_MENU_ITEM_HOTPLUG_CODE_EN	(ASCII*) " HotPlug CPU        [#] "
-#define RSC_MENU_ITEM_TOOLS_CODE_EN	(ASCII*) " Tools             [F3] "
+#define RSC_MENU_ITEM_TOOLS_CODE_EN	(ASCII*) " Tools              [O] "
 #define RSC_MENU_ITEM_ABOUT_CODE_EN	(ASCII*) " About              [a] "
 #define RSC_MENU_ITEM_HELP_CODE_EN	(ASCII*) " Help               [h] "
 #define RSC_MENU_ITEM_KEYS_CODE_EN	(ASCII*) " Shortcuts         [F1] "
 #define RSC_MENU_ITEM_LANG_CODE_EN	(ASCII*) " Languages          [L] "
-#define RSC_MENU_ITEM_QUIT_CODE_EN	(ASCII*) " Quit              [F4] "
+#define RSC_MENU_ITEM_QUIT_CODE_EN	(ASCII*) " Quit        [Ctrl]+[x] "
 #define RSC_MENU_ITEM_DASHBOARD_CODE_EN (ASCII*) " Dashboard          [d] "
 #define RSC_MENU_ITEM_FREQUENCY_CODE_EN (ASCII*) " Frequency          [f] "
 #define RSC_MENU_ITEM_INST_CYCLE_CODE_EN (ASCII*)" Inst cycles        [i] "
@@ -534,6 +532,10 @@
 			(ASCII*) " [Alt]+[p]                     Record "
 #define RSC_ADV_HELP_ITEM_FAHR_CELS_CODE_EN				\
 			(ASCII*) " F              Fahrenheit or Celsius "
+#define RSC_ADV_HELP_ITEM_PROC_EVENT_CODE_EN				\
+			(ASCII*) " H            Manage Processor Events "
+#define RSC_ADV_HELP_ITEM_SECRET_CODE_EN				\
+			(ASCII*) " Y            Show | Hide Secret Data "
 
 #define RSC_TURBO_CLOCK_TITLE_CODE_EN	(ASCII*) " Turbo Clock %1dC "
 #define RSC_RATIO_CLOCK_TITLE_CODE_EN	(ASCII*) " %s Clock Ratio "
@@ -670,7 +672,10 @@
 		(ASCII*)"CoreFreq."					\
 			"  Copyright (C) 2015-2019 CYRIL INGENIERIE\n\n"\
 			"Usage:\t%s [-option <arguments>]\n"		\
+			"\t-0,1,2\tMemory unit in K,M,G Byte\n" 	\
 			"\t-F\tTemperature in Fahrenheit\n"		\
+			"\t-J <#>\tSMBIOS string index number\n"	\
+			"\t-Y\tShow Secret Data\n"			\
 			"\t-t\tShow Top (default)\n"			\
 			"\t-d\tShow Dashboard\n"			\
 			"\t-V\tMonitor Power and Voltage\n"		\

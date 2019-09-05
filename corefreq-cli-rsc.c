@@ -358,9 +358,13 @@ ATTRIBUTE Rsc_MemoryController_Cond_Attr[2][14] = {
 	RSC_MEMORY_CONTROLLER_COND1_ATTR
 };
 
-ATTRIBUTE Rsc_CreateMenu_Stop_Attr[] = RSC_CREATE_MENU_STOP_ATTR,
-	  Rsc_CreateMenu_FnKey_Attr[] = RSC_CREATE_MENU_FN_KEY_ATTR,
-	  Rsc_CreateMenu_ShortKey_Attr[] = RSC_CREATE_MENU_SHORTKEY_ATTR;
+ATTRIBUTE Rsc_CreateMenu_Disable_Attr[] = RSC_CREATE_MENU_DISABLE_ATTR,
+	Rsc_CreateMenu_Menu_Attr[]	= RSC_CREATE_MENU_ITEM_MENU_ATTR,
+	Rsc_CreateMenu_View_Attr[]	= RSC_CREATE_MENU_ITEM_VIEW_ATTR,
+	Rsc_CreateMenu_Window_Attr[]	= RSC_CREATE_MENU_ITEM_WINDOW_ATTR,
+	Rsc_CreateMenu_FnKey_Attr[]	= RSC_CREATE_MENU_FN_KEY_ATTR,
+	Rsc_CreateMenu_ShortKey_Attr[]	= RSC_CREATE_MENU_SHORTKEY_ATTR,
+	Rsc_CreateMenu_CtrlKey_Attr[]	= RSC_CREATE_MENU_CTRL_KEY_ATTR;
 
 ATTRIBUTE Rsc_CreateSettings_Cond_Attr[2][32] = {
 	RSC_CREATE_SETTINGS_COND0_ATTR,
@@ -403,6 +407,8 @@ ATTRIBUTE Rsc_HotEvent_Cond_Attr[5][3] = {
 ATTRIBUTE Rsc_BoxEvent_Attr[] = RSC_BOX_EVENT_ATTR;
 
 ATTRIBUTE Rsc_CreateRecorder_Attr[] = RSC_CREATE_RECORDER_ATTR;
+
+ATTRIBUTE Rsc_SMBIOS_Item_Attr[] = RSC_SMBIOS_ITEM_ATTR;
 
 RESOURCE_ST Resource[] = {
 	[RSC_LAYOUT_HEADER_PROC] = {
@@ -1041,8 +1047,8 @@ RESOURCE_ST Resource[] = {
 		.Attr = Rsc_MemoryController_Cond_Attr[1],
 		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
 	},
-	[RSC_CREATE_MENU_STOP] = {
-		.Attr = Rsc_CreateMenu_Stop_Attr,
+	[RSC_CREATE_MENU_DISABLE] = {
+		.Attr = Rsc_CreateMenu_Disable_Attr,
 		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
 	},
 	[RSC_CREATE_MENU_FN_KEY] = {
@@ -1051,6 +1057,10 @@ RESOURCE_ST Resource[] = {
 	},
 	[RSC_CREATE_MENU_SHORTKEY] = {
 		.Attr = Rsc_CreateMenu_ShortKey_Attr,
+		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
+	},
+	[RSC_CREATE_MENU_CTRL_KEY] = {
+		.Attr = Rsc_CreateMenu_CtrlKey_Attr,
 		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
 	},
 	[RSC_CREATE_SETTINGS_COND0] = {
@@ -1145,6 +1155,10 @@ RESOURCE_ST Resource[] = {
 	},
 	[RSC_CREATE_RECORDER] = {
 		.Attr = Rsc_CreateRecorder_Attr,
+		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
+	},
+	[RSC_SMBIOS_ITEM] = {
+		.Attr = Rsc_SMBIOS_Item_Attr,
 		.Code = {[LOC_EN] = hSpace, [LOC_FR] = hSpace}
 	},
 /* ASCII */
@@ -2633,21 +2647,21 @@ RESOURCE_ST Resource[] = {
 		}
 	},
 	[RSC_MENU_ITEM_MENU] = {
-		.Attr = vColor,
+		.Attr = Rsc_CreateMenu_Menu_Attr,
 		.Code = {
 			[LOC_EN] = RSC_MENU_ITEM_MENU_CODE_EN,
 			[LOC_FR] = RSC_MENU_ITEM_MENU_CODE_FR
 		}
 	},
 	[RSC_MENU_ITEM_VIEW] = {
-		.Attr = vColor,
+		.Attr = Rsc_CreateMenu_View_Attr,
 		.Code = {
 			[LOC_EN] = RSC_MENU_ITEM_VIEW_CODE_EN,
 			[LOC_FR] = RSC_MENU_ITEM_VIEW_CODE_FR
 		}
 	},
 	[RSC_MENU_ITEM_WINDOW] = {
-		.Attr = vColor,
+		.Attr = Rsc_CreateMenu_Window_Attr,
 		.Code = {
 			[LOC_EN] = RSC_MENU_ITEM_WINDOW_CODE_EN,
 			[LOC_FR] = RSC_MENU_ITEM_WINDOW_CODE_FR
@@ -3267,6 +3281,20 @@ RESOURCE_ST Resource[] = {
 		.Code = {
 			[LOC_EN] = RSC_ADV_HELP_ITEM_FAHR_CELS_CODE_EN,
 			[LOC_FR] = RSC_ADV_HELP_ITEM_FAHR_CELS_CODE_FR
+		}
+	},
+	[RSC_ADV_HELP_ITEM_PROC_EVENT] = {
+		.Attr = vColor,
+		.Code = {
+			[LOC_EN] = RSC_ADV_HELP_ITEM_PROC_EVENT_CODE_EN,
+			[LOC_FR] = RSC_ADV_HELP_ITEM_PROC_EVENT_CODE_FR
+		}
+	},
+	[RSC_ADV_HELP_ITEM_SECRET] = {
+		.Attr = vColor,
+		.Code = {
+			[LOC_EN] = RSC_ADV_HELP_ITEM_SECRET_CODE_EN,
+			[LOC_FR] = RSC_ADV_HELP_ITEM_SECRET_CODE_FR
 		}
 	},
 	[RSC_TURBO_CLOCK_TITLE] = {

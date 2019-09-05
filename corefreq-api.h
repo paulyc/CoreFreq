@@ -260,16 +260,14 @@ typedef struct
 	{
 		unsigned long long	V,
 					_pad[7];
-	} Sync;
+	} Sync __attribute__ ((aligned (8)));
 
-	Bit64				OffLine __attribute__ ((aligned (64)));
+	Bit64				OffLine __attribute__ ((aligned (8)));
 
-#if FEAT_DBG > 0
 	struct
 	{
 		unsigned long long	TSC;
-	} Overhead;
-#endif
+	} Overhead __attribute__ ((aligned (8)));
 
 	struct
 	{
@@ -287,7 +285,12 @@ typedef struct
 					TSC;
 
 		unsigned long long	C1;
-	} Counter[2];
+
+		struct
+		{
+		unsigned long long	ACCU;
+		} Power;
+	} Counter[2] __attribute__ ((aligned (8)));
 
 	struct
 	{
@@ -306,8 +309,13 @@ typedef struct
 					TSC,
 					C1;
 
+		struct
+		{
+		unsigned long long	ACCU;
+		} Power;
+
 		unsigned int		SMI;
-	} Delta;
+	} Delta __attribute__ ((aligned (8)));
 
 	POWER_THERMAL			PowerThermal;
 
@@ -428,6 +436,12 @@ typedef struct
 	/* 4298h */		SNB_IMC_TC_RFTP 	RFTP;	/* 32 bits    */
 			} SNB;
 			struct {
+	/*  200h */		SNB_IMC_TC_DBP		DBP;	/* 32 bits    */
+	/*  204h */		SNB_IMC_TC_RAP		RAP;	/* 32 bits    */
+	/*  208h */		SNB_IMC_TC_RWP		RWP;	/* 32 bits    */
+	/*  214h */		SNB_IMC_TC_RFTP 	RFTP;	/* 32 bits    */
+			} SNB_EP;
+			struct {
 	/* 4C04h */		HSW_DDR_TIMING		Timing;	/* 32 bits    */
 	/* 4C08h */		HSW_DDR_RANK_TIMING_A	Rank_A;	/* 32 bits    */
 	/* 4C0Ch */		HSW_DDR_RANK_TIMING_B	Rank_B;	/* 32 bits    */
@@ -447,6 +461,7 @@ typedef struct
 		union {
 	/* 1208h */	G965_MC_DRAM_RANK_ATTRIB	DRA;	/* 32 bits    */
 	/* 48h */	NHM_IMC_DOD_CHANNEL		DOD;	/* 32 bits    */
+	/* 80h */	SNB_EP_DIMM_MTR 		MTR;	/* 32 bits    */
 	/* 40h */	AMD_0F_DRAM_CS_BASE_ADDR	MBA;	/* 32 bits    */
 		} DIMM[MC_MAX_DIMM];
 	} Channel[MC_MAX_CHA];
@@ -479,6 +494,10 @@ typedef struct
 	/* 5008h */				MAD1;		/* 32 bits    */
 		} SNB;
 		struct {
+			SNB_EP_MC_TECH		TECH;		/* 32 bits    */
+	/* 80h */	SNB_EP_TADWAYNESS	TAD;		/* 12x32 bits */
+		} SNB_EP;
+		struct {
 	/* 5004h */	SKL_IMC_MAD_CHANNEL	MADC0,		/* 32 bits    */
 	/* 5008h */				MADC1;		/* 32 bits    */
 	/* 500Ch */	SKL_IMC_MAD_DIMM	MADD0,		/* 32 bits    */
@@ -502,7 +521,7 @@ typedef struct
 	unsigned short		SlotCount, ChannelCount;
 } MC_REGISTERS;
 
-typedef union
+typedef struct
 {
 	union {
 		struct {
@@ -510,11 +529,18 @@ typedef union
 		};
 		struct {
 			NHM_IMC_CLK_RATIO_STATUS DimmClock;
-			X58_QPI_FREQUENCY	QuickPath;
+			QPI_FREQUENCY		QuickPath;
 		};
 		struct {
 			SNB_CAPID		SNB_Cap;
 			IVB_CAPID		IVB_Cap;
+		};
+		struct {
+			SNB_EP_CAPID0		SNB_EP_Cap0;
+			SNB_EP_CAPID1		SNB_EP_Cap1;
+			SNB_EP_CAPID2		SNB_EP_Cap2;
+			SNB_EP_CAPID3		SNB_EP_Cap3;
+			SNB_EP_CAPID4		SNB_EP_Cap4;
 		};
 		struct {
 			SKL_CAPID_A		SKL_Cap_A;
@@ -525,9 +551,9 @@ typedef union
 			AMD_0F_HTT_UNIT_ID	UnitID;
 			AMD_0F_HTT_FREQUENCY	LDTi_Freq[3];
 		};
-		struct {
-			unsigned long long	IOMMU_CR;
-		};
+	};
+	struct {
+		unsigned long long	IOMMU_CR;
 	};
 } BUS_REGISTERS;
 
@@ -567,7 +593,7 @@ typedef struct
 	  struct {
 	    unsigned long long	ACCU[PWR_DOMAIN(SIZE)];
 	  } Power;
-	} Counter[2];
+	} Counter[2] __attribute__ ((aligned (8)));
 
 	struct
 	{
@@ -586,42 +612,45 @@ typedef struct
 	  struct {
 	    unsigned long long	ACCU[PWR_DOMAIN(SIZE)];
 	  } Power;
-	} Delta;
+	} Delta __attribute__ ((aligned (8)));
 
 	struct
 	{
+	    union {
 		UNCORE_GLOBAL_PERF_CONTROL Uncore_GlobalPerfControl;
+		UNCORE_PMON_GLOBAL_CONTROL Uncore_PMonGlobalControl;
+	    };
 		UNCORE_FIXED_PERF_CONTROL  Uncore_FixedPerfControl;
 	} SaveArea;
 
 	FEATURES		Features;
 
-	Bit64			CR_Mask 	__attribute__ ((aligned (64)));
-	Bit64			ODCM_Mask	__attribute__ ((aligned (64)));
-	Bit64			PowerMgmt_Mask	__attribute__ ((aligned (64)));
-	Bit64			SpeedStep_Mask	__attribute__ ((aligned (64)));
-	Bit64			TurboBoost_Mask __attribute__ ((aligned (64)));
-	Bit64			C1E_Mask __attribute__ ((aligned (64)));
-	Bit64	/* NHM */	C3A_Mask __attribute__ ((aligned (64)));
-	Bit64	/* NHM */	C1A_Mask __attribute__ ((aligned (64)));
-	Bit64	/* SNB */	C3U_Mask __attribute__ ((aligned (64)));
-	Bit64	/* SNB */	C1U_Mask __attribute__ ((aligned (64)));
-	Bit64	/* AMD */	CC6_Mask __attribute__ ((aligned (64)));
-	Bit64	/* AMD */	PC6_Mask __attribute__ ((aligned (64)));
+	Bit256			CR_Mask 	__attribute__ ((aligned (16)));
+	Bit256			ODCM_Mask	__attribute__ ((aligned (16)));
+	Bit256			PowerMgmt_Mask	__attribute__ ((aligned (16)));
+	Bit256			SpeedStep_Mask	__attribute__ ((aligned (16)));
+	Bit256			TurboBoost_Mask __attribute__ ((aligned (16)));
+	Bit256			C1E_Mask __attribute__ ((aligned (16)));
+	Bit256	/* NHM */	C3A_Mask __attribute__ ((aligned (16)));
+	Bit256	/* NHM */	C1A_Mask __attribute__ ((aligned (16)));
+	Bit256	/* SNB */	C3U_Mask __attribute__ ((aligned (16)));
+	Bit256	/* SNB */	C1U_Mask __attribute__ ((aligned (16)));
+	Bit256	/* AMD */	CC6_Mask __attribute__ ((aligned (16)));
+	Bit256	/* AMD */	PC6_Mask __attribute__ ((aligned (16)));
 
-	Bit64			ODCM		__attribute__ ((aligned (64)));
-	Bit64			PowerMgmt	__attribute__ ((aligned (64)));
-	Bit64			SpeedStep	__attribute__ ((aligned (64)));
-	Bit64			TurboBoost	__attribute__ ((aligned (64)));
-	Bit64			C1E		__attribute__ ((aligned (64)));
-	Bit64			C3A		__attribute__ ((aligned (64)));
-	Bit64			C1A		__attribute__ ((aligned (64)));
-	Bit64			C3U		__attribute__ ((aligned (64)));
-	Bit64			C1U		__attribute__ ((aligned (64)));
-	Bit64			CC6		__attribute__ ((aligned (64)));
-	Bit64			PC6		__attribute__ ((aligned (64)));
-	Bit64			SMM		__attribute__ ((aligned (64)));
-	Bit64			VM		__attribute__ ((aligned (64)));
+	Bit256			ODCM		__attribute__ ((aligned (16)));
+	Bit256			PowerMgmt	__attribute__ ((aligned (16)));
+	Bit256			SpeedStep	__attribute__ ((aligned (16)));
+	Bit256			TurboBoost	__attribute__ ((aligned (16)));
+	Bit256			C1E		__attribute__ ((aligned (16)));
+	Bit256			C3A		__attribute__ ((aligned (16)));
+	Bit256			C1A		__attribute__ ((aligned (16)));
+	Bit256			C3U		__attribute__ ((aligned (16)));
+	Bit256			C1U		__attribute__ ((aligned (16)));
+	Bit256			CC6		__attribute__ ((aligned (16)));
+	Bit256			PC6		__attribute__ ((aligned (16)));
+	Bit256			SMM		__attribute__ ((aligned (16)));
+	Bit256			VM		__attribute__ ((aligned (16)));
 
 	enum THERMAL_FORMULAS	thermalFormula;
 	enum VOLTAGE_FORMULAS	voltageFormula;
@@ -656,7 +685,7 @@ typedef struct
 	} PowerThermal;
 
 	struct {
-		Bit64		Signal __attribute__ ((aligned (64)));
+		Bit64		Signal __attribute__ ((aligned (8)));
 		struct {
 			size_t	Size;
 			int	Order;
@@ -682,4 +711,7 @@ typedef struct
 	char			Architecture[CODENAME_LEN];
 
 	SMBIOS_ST		SMB;
+
+	FOOTPRINT		FootPrint;
 } PROC;
+

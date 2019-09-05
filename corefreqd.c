@@ -32,10 +32,11 @@
 #define PAGE_SIZE (sysconf(_SC_PAGESIZE))
 
 /* §8.10.6.7 Place Locks and Semaphores in Aligned, 128-Byte Blocks of Memory */
-static Bit64 roomSeed __attribute__ ((aligned (64))) = 0x0;
-static Bit64 roomCore __attribute__ ((aligned (64))) = 0x0;
-static Bit64 roomSched __attribute__ ((aligned (64))) = 0x0;
-static Bit64 Shutdown __attribute__ ((aligned (64))) = 0x0;
+static Bit256 roomSeed	__attribute__ ((aligned (16))) = {0x0, 0x0, 0x0, 0x0};
+static Bit256 roomCore	__attribute__ ((aligned (16))) = {0x0, 0x0, 0x0, 0x0};
+static Bit256 roomSched __attribute__ ((aligned (16))) = {0x0, 0x0, 0x0, 0x0};
+static Bit256 roomClear __attribute__ ((aligned (16))) = {0x0, 0x0, 0x0, 0x0};
+static Bit64 Shutdown	__attribute__ ((aligned (8))) = 0x0;
 unsigned int Quiet = 0x001, SysGateStartUp = 1;
 
 typedef struct
@@ -82,16 +83,16 @@ static void *Core_Cycle(void *arg)
 	if (pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset) != 0)
 		goto EXIT;
 
-	char comm[TASK_COMM_LEN];
-	sprintf(comm, "corefreqd/%d", cpu);
+	char comm[TASK_COMM_LEN+4+1];
+	sprintf(comm, "corefreqd/%u", cpu);
 	pthread_setname_np(tid, comm);
 
 	if (Quiet & 0x100) {
 		printf("    Thread [%lx] Init CYCLE %03u\n", tid, cpu);
 		fflush(stdout);
 	}
-	BITSET(BUS_LOCK, roomSeed, cpu);
-	BITSET(BUS_LOCK, roomCore, cpu);
+	BITSET_CC(BUS_LOCK, roomSeed, cpu);
+	BITSET_CC(BUS_LOCK, roomCore, cpu);
 
   do {
     while (!BITVAL(Core->Sync.V, 63)
@@ -103,9 +104,9 @@ static void *Core_Cycle(void *arg)
 
     if (!BITVAL(Shutdown, 0) && !BITVAL(Core->OffLine, OS))
     {
-	if (BITVAL(roomCore, cpu)) {
+	if (BITVAL_CC(roomCore, cpu)) {
 		Cpu->Toggle = !Cpu->Toggle;
-		BITCLR(BUS_LOCK, roomCore, cpu);
+		BITCLR_CC(BUS_LOCK, roomCore, cpu);
 	}
 	struct FLIP_FLOP *CFlip = &Cpu->FlipFlop[Cpu->Toggle];
 
@@ -273,8 +274,8 @@ static void *Core_Cycle(void *arg)
     }
   } while (!BITVAL(Shutdown, 0) && !BITVAL(Core->OffLine, OS)) ;
 
-	BITCLR(BUS_LOCK, roomCore, cpu);
-	BITCLR(BUS_LOCK, roomSeed, cpu);
+	BITCLR_CC(BUS_LOCK, roomCore, cpu);
+	BITCLR_CC(BUS_LOCK, roomSeed, cpu);
 EXIT:
 	if (Quiet & 0x100) {
 		printf("    Thread [%lx] %s CYCLE %03u\n", tid,
@@ -291,22 +292,22 @@ void SliceScheduling(SHM_STRUCT *Shm, unsigned int cpu, enum PATTERN pattern)
 	case RESET_CSP:
 		for (seek = 0; seek < Shm->Proc.CPU.Count; seek++) {
 			if (seek == Shm->Proc.Service.Core)
-				BITSET(LOCKLESS, roomSched, seek);
+				BITSET_CC(LOCKLESS, roomSched, seek);
 			else
-				BITCLR(LOCKLESS, roomSched, seek);
+				BITCLR_CC(LOCKLESS, roomSched, seek);
 		}
 		break;
 	case ALL_SMT:
 		if (cpu == Shm->Proc.Service.Core)
-			roomSched = roomSeed;
+			BITSTOR_CC(LOCKLESS, roomSched, roomSeed);
 		break;
 	case RAND_SMT:
 		do {
 			seek = (unsigned int) rand();
 			seek = seek % Shm->Proc.CPU.Count;
 		} while (BITVAL(Shm->Cpu[seek].OffLine, OS));
-		BITCLR(LOCKLESS, roomSched, cpu);
-		BITSET(LOCKLESS, roomSched, seek);
+		BITCLR_CC(LOCKLESS, roomSched, cpu);
+		BITSET_CC(LOCKLESS, roomSched, seek);
 		break;
 	case RR_SMT:
 		seek = cpu;
@@ -315,11 +316,11 @@ void SliceScheduling(SHM_STRUCT *Shm, unsigned int cpu, enum PATTERN pattern)
 			if (seek >= Shm->Proc.CPU.Count)
 				seek = 0;
 		} while (BITVAL(Shm->Cpu[seek].OffLine, OS));
-		BITCLR(LOCKLESS, roomSched, cpu);
-		BITSET(LOCKLESS, roomSched, seek);
+		BITCLR_CC(LOCKLESS, roomSched, cpu);
+		BITSET_CC(LOCKLESS, roomSched, seek);
 		break;
 	case USR_CPU:
-		BITSET(LOCKLESS, roomSched, cpu);
+		BITSET_CC(LOCKLESS, roomSched, cpu);
 		break;
 	}
 }
@@ -350,8 +351,8 @@ static void *Child_Thread(void *arg)
 	if (pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset) != 0)
 		goto EXIT;
 
-	char comm[TASK_COMM_LEN];
-	sprintf(comm, "corefreqd#%d", cpu);
+	char comm[TASK_COMM_LEN+4+1];
+	sprintf(comm, "corefreqd#%u", cpu);
 	pthread_setname_np(tid, comm);
 
 	if (Quiet & 0x100) {
@@ -359,7 +360,7 @@ static void *Child_Thread(void *arg)
 		fflush(stdout);
 	}
 
-	BITSET(BUS_LOCK, roomSeed, cpu);
+	BITSET_CC(BUS_LOCK, roomSeed, cpu);
 
 	do {
 		while (!BITVAL(Shm->Proc.Sync, 31)
@@ -368,14 +369,14 @@ static void *Child_Thread(void *arg)
 			nanosleep(&Shm->Sleep.sliceWaiting, NULL);
 		}
 
-		BITSET(BUS_LOCK, roomCore, cpu);
+		BITSET_CC(BUS_LOCK, roomCore, cpu);
 
 		RESET_Slice(Cpu->Slice);
 
 		while ( BITVAL(Shm->Proc.Sync, 31)
 		    && !BITVAL(Shutdown, 0) )
 		{
-		    if (BITVAL(roomSched, cpu)) {
+		    if (BITVAL_CC(roomSched, cpu)) {
 			CallSliceFunc(	Shm, cpu,
 					Arg->Ref->Slice.Func,
 					Arg->Ref->Slice.arg);
@@ -394,11 +395,11 @@ static void *Child_Thread(void *arg)
 		    }
 		}
 
-		BITCLR(BUS_LOCK, roomCore, cpu);
+		BITCLR_CC(BUS_LOCK, roomCore, cpu);
 
 	} while (!BITVAL(Shutdown, 0) && !BITVAL(Cpu->OffLine, OS)) ;
 
-	BITCLR(BUS_LOCK, roomSeed, cpu);
+	BITCLR_CC(BUS_LOCK, roomSeed, cpu);
 
 	RESET_Slice(Cpu->Slice);
 EXIT:
@@ -471,6 +472,7 @@ void PowerInterface(SHM_STRUCT *Shm, PROC *Proc)
     switch (Proc->powerFormula) {
       case POWER_FORMULA_INTEL:
       case POWER_FORMULA_AMD:
+      case POWER_FORMULA_AMD_17h:
 	Shm->Proc.Power.Unit.Watts = Proc->PowerThermal.Unit.PU > 0 ?
 			1.0 / (double) (1 << Proc->PowerThermal.Unit.PU) : 0;
 	Shm->Proc.Power.Unit.Joules= Proc->PowerThermal.Unit.ESU > 0 ?
@@ -482,82 +484,66 @@ void PowerInterface(SHM_STRUCT *Shm, PROC *Proc)
 	Shm->Proc.Power.Unit.Joules= Proc->PowerThermal.Unit.ESU > 0 ?
 			0.001 / (double)(1 << Proc->PowerThermal.Unit.ESU) : 0;
 	break;
-      case POWER_FORMULA_AMD_17h: {
-	unsigned int maxCoreCount = (Shm->Proc.Features.leaf80000008.ECX.NC + 1)
-					>> Shm->Proc.Features.HTT_Enable;
-
-	Shm->Proc.Power.Unit.Watts = Proc->PowerThermal.Unit.PU > 0 ?
-			1.0 / (double) (1 << Proc->PowerThermal.Unit.PU) : 0;
-	Shm->Proc.Power.Unit.Joules= Proc->PowerThermal.Unit.ESU > 0 ?
-			1.0 / (double)(1 << Proc->PowerThermal.Unit.ESU) : 0;
-	if (maxCoreCount != 0) {
-		Shm->Proc.Power.Unit.Watts  /= maxCoreCount;
-		Shm->Proc.Power.Unit.Joules /= maxCoreCount;
-	}
-      }
-	break;
       case POWER_FORMULA_NONE:
 	break;
     }
 	Shm->Proc.Power.Unit.Times = Proc->PowerThermal.Unit.TU > 0 ?
 			1.0 / (double) (1 << Proc->PowerThermal.Unit.TU) : 0;
-	/* Scale window unit time to the driver monitoring interval.	*/
-	Shm->Proc.Power.Unit.Times *= 1000.0 / (double) Shm->Sleep.Interval;
 }
 
 void Technology_Update(SHM_STRUCT *Shm, PROC *Proc)
 {	/* Technologies aggregation.					*/
 	Shm->Proc.Technology.PowerNow = (Shm->Proc.PowerNow == 0b11);
 
-	Shm->Proc.Technology.ODCM = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.ODCM = BITWISEAND_CC(LOCKLESS,
 						Proc->ODCM,
 						Proc->ODCM_Mask) != 0;
 
-	Shm->Proc.Technology.PowerMgmt = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.PowerMgmt = BITWISEAND_CC(LOCKLESS,
 						Proc->PowerMgmt,
 						Proc->PowerMgmt_Mask) != 0;
 
-	Shm->Proc.Technology.EIST = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.EIST = BITWISEAND_CC(LOCKLESS,
 						Proc->SpeedStep,
 						Proc->SpeedStep_Mask) != 0;
 
-	Shm->Proc.Technology.Turbo = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.Turbo = BITWISEAND_CC(LOCKLESS,
 						Proc->TurboBoost,
 						Proc->TurboBoost_Mask) != 0;
 
-	Shm->Proc.Technology.C1E = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.C1E = BITWISEAND_CC(LOCKLESS,
 						Proc->C1E,
 						Proc->C1E_Mask) != 0;
 
-	Shm->Proc.Technology.C3A = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.C3A = BITWISEAND_CC(LOCKLESS,
 						Proc->C3A,
 						Proc->C3A_Mask) != 0;
 
-	Shm->Proc.Technology.C1A = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.C1A = BITWISEAND_CC(LOCKLESS,
 						Proc->C1A,
 						Proc->C1A_Mask) != 0;
 
-	Shm->Proc.Technology.C3U = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.C3U = BITWISEAND_CC(LOCKLESS,
 						Proc->C3U,
 						Proc->C3U_Mask) != 0;
 
-	Shm->Proc.Technology.C1U = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.C1U = BITWISEAND_CC(LOCKLESS,
 						Proc->C1U,
 						Proc->C1U_Mask) != 0;
 
-	Shm->Proc.Technology.CC6 = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.CC6 = BITWISEAND_CC(LOCKLESS,
 						Proc->CC6,
 						Proc->CC6_Mask) != 0;
 
-	Shm->Proc.Technology.PC6 = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.PC6 = BITWISEAND_CC(LOCKLESS,
 						Proc->PC6,
 						Proc->PC6_Mask) != 0;
 
-	Shm->Proc.Technology.SMM = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.SMM = BITWISEAND_CC(LOCKLESS,
 						Proc->SMM,
 						Proc->CR_Mask) != 0;
 
-	Shm->Proc.Technology.VM = BITWISEAND(LOCKLESS,
+	Shm->Proc.Technology.VM = BITWISEAND_CC(LOCKLESS,
 						Proc->VM,
 						Proc->CR_Mask) != 0;
 }
@@ -1619,7 +1605,8 @@ void NHM_IMC(SHM_STRUCT *Shm, PROC *Proc)
 	    }
 	}
 	Shm->Uncore.MC[mc].Channel[cha].Timing.ECC =
-				Proc->Uncore.MC[mc].NHM.STATUS.ECC_ENABLED;
+				Proc->Uncore.MC[mc].NHM.STATUS.ECC_ENABLED
+				& Proc->Uncore.MC[mc].NHM.CONTROL.ECC_ENABLED;
       }
     }
 }
@@ -1655,9 +1642,9 @@ void QPI_CLK(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 	Shm->Uncore.CtrlSpeed *= Core->Clock.Hz;
 	Shm->Uncore.CtrlSpeed /= Shm->Proc.Features.Factory.Clock.Hz;
 
-	Shm->Uncore.Bus.Rate = Proc->Uncore.Bus.QuickPath.QPIFREQSEL == 00 ?
-		4800 : Proc->Uncore.Bus.QuickPath.QPIFREQSEL == 10 ?
-			6400 : Proc->Uncore.Bus.QuickPath.QPIFREQSEL == 01 ?
+	Shm->Uncore.Bus.Rate = Proc->Uncore.Bus.QuickPath.X58.QPIFREQSEL == 00 ?
+		4800 : Proc->Uncore.Bus.QuickPath.X58.QPIFREQSEL == 10 ?
+			6400 : Proc->Uncore.Bus.QuickPath.X58.QPIFREQSEL == 01 ?
 				5866 : 6400;
 
 	Shm->Uncore.Bus.Speed = (Core->Clock.Hz * Shm->Uncore.Bus.Rate)
@@ -1668,7 +1655,7 @@ void QPI_CLK(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 	Shm->Uncore.Unit.DDR_Rate = 0b11;
 	Shm->Uncore.Unit.DDRSpeed = 0b00;
 
-	Shm->Proc.Technology.IOMMU = !Proc->Uncore.Bus.QuickPath.VT_d;
+	Shm->Proc.Technology.IOMMU = !Proc->Uncore.Bus.QuickPath.X58.VT_d;
 }
 
 void DMI_CLK(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
@@ -1859,6 +1846,186 @@ void SNB_CAP(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 	Shm->Proc.Technology.IOMMU = !Proc->Uncore.Bus.SNB_Cap.VT_d;
 }
 
+void SNB_EP_IMC(SHM_STRUCT *Shm, PROC *Proc)
+{
+    unsigned short mc, cha, slot;
+
+    for (mc = 0; mc < Shm->Uncore.CtrlCount; mc++)
+    {
+      Shm->Uncore.MC[mc].SlotCount = Proc->Uncore.MC[mc].SlotCount;
+      Shm->Uncore.MC[mc].ChannelCount = Proc->Uncore.MC[mc].ChannelCount;
+
+      for (cha = 0; cha < Shm->Uncore.MC[mc].ChannelCount; cha++)
+      {
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tCL   =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tCL;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRCD  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tRCD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRP   =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tRP;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tCWL  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tCWL;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRAS  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tRAS;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRRD  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tRRD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRFC  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RFTP.EP.tRFC;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tWR  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tWR;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tRTPr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tRTPr;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tWTPr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tWTPr;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tFAW  =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tFAW;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tddWrTRd =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tWRDD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tdrWrTRd =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tWRDR;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tsrWrTRd =
+		4 + Proc->Uncore.MC[mc].Channel[cha].SNB_EP.DBP.EP.tCWL
+			+ Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.tWTPr;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tddRdTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRWDD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tdrRdTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRWDR;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tsrRdTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRWSR;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tddRdTRd =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRRDD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tdrRdTRd =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRRDR;
+/* TODO
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tsrRdTRd =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tRRSR;
+*/
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tddWrTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tWWDD;
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tdrWrTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tWWDR;
+/* TODO
+	Shm->Uncore.MC[mc].Channel[cha].Timing.tsrWrTWr =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tWWSR;
+*/
+	Shm->Uncore.MC[mc].Channel[cha].Timing.B2B   =
+			Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RWP.EP.tCCD;
+
+	switch(Proc->Uncore.MC[mc].Channel[cha].SNB_EP.RAP.EP.CMD_Stretch) {
+	case 0b00:
+		Shm->Uncore.MC[mc].Channel[cha].Timing.CMD_Rate = 1;
+		break;
+	case 0b10:
+		Shm->Uncore.MC[mc].Channel[cha].Timing.CMD_Rate = 2;
+		break;
+	case 0b11:
+		Shm->Uncore.MC[mc].Channel[cha].Timing.CMD_Rate = 3;
+		break;
+	default:
+		Shm->Uncore.MC[mc].Channel[cha].Timing.CMD_Rate = 0;
+		break;
+	}
+
+	for (slot = 0; slot < Shm->Uncore.MC[mc].SlotCount; slot++)
+	{
+	    if (Proc->Uncore.MC[mc].Channel[cha].DIMM[slot].MTR.DIMM_POP)
+	    {
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Banks = 4 <<
+		Proc->Uncore.MC[mc].Channel[cha].DIMM[slot].MTR.DDR3_WIDTH;
+
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Ranks = 1 <<
+		Proc->Uncore.MC[mc].Channel[cha].DIMM[slot].MTR.RANK_CNT;
+
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Rows = 1 << ( 13
+		+ Proc->Uncore.MC[mc].Channel[cha].DIMM[slot].MTR.RA_WIDTH );
+
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Cols = 1 << ( 10
+		+ Proc->Uncore.MC[mc].Channel[cha].DIMM[slot].MTR.CA_WIDTH );
+
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Size = 8
+			* Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Rows
+			* Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Cols
+			* Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Banks
+			* Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Ranks;
+		Shm->Uncore.MC[mc].Channel[cha].DIMM[slot].Size /= (1024 *1024);
+	    }
+	}
+
+	Shm->Uncore.MC[mc].Channel[cha].Timing.ECC =			\
+				Proc->Uncore.MC[mc].SNB_EP.TECH.ECC_EN
+				& !Proc->Uncore.Bus.SNB_EP_Cap3.ECC_DIS;
+      }
+    }
+}
+
+void SNB_EP_CAP(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
+{
+	switch (Proc->Uncore.Bus.SNB_EP_Cap1.DMFC) {
+	case 0b111:
+		Shm->Uncore.CtrlSpeed = 1066;
+		break;
+	case 0b110:
+		Shm->Uncore.CtrlSpeed = 1333;
+		break;
+	case 0b101:
+		Shm->Uncore.CtrlSpeed = 1600;
+		break;
+	case 0b100:
+		Shm->Uncore.CtrlSpeed = 1866;
+		break;
+	case 0b011:
+		Shm->Uncore.CtrlSpeed = 2133;
+		break;
+	case 0b010:
+		Shm->Uncore.CtrlSpeed = 2400;
+		break;
+	case 0b001:
+		Shm->Uncore.CtrlSpeed = 2666;
+		break;
+	case 0b000:
+		Shm->Uncore.CtrlSpeed = 2933;
+		break;
+	}
+
+	Shm->Uncore.CtrlSpeed *= Core->Clock.Hz;
+	Shm->Uncore.CtrlSpeed /= Shm->Proc.Features.Factory.Clock.Hz;
+
+	Shm->Uncore.Bus.Rate =						\
+	  Proc->Uncore.Bus.QuickPath.IVB_EP.QPIFREQSEL == 010 ? 5600
+	: Proc->Uncore.Bus.QuickPath.IVB_EP.QPIFREQSEL == 011 ? 6400
+	: Proc->Uncore.Bus.QuickPath.IVB_EP.QPIFREQSEL == 100 ? 7200
+	: Proc->Uncore.Bus.QuickPath.IVB_EP.QPIFREQSEL == 101 ? 8000 : 5000;
+
+	Shm->Uncore.Bus.Speed = (Core->Clock.Hz * Shm->Uncore.Bus.Rate)
+				/ Shm->Proc.Features.Factory.Clock.Hz;
+
+	Shm->Uncore.Unit.Bus_Rate = 0b01;
+	Shm->Uncore.Unit.BusSpeed = 0b01;
+	Shm->Uncore.Unit.DDR_Rate = 0b11;
+	Shm->Uncore.Unit.DDRSpeed = 0b00;
+/* TODO */
+	Shm->Proc.Technology.IOMMU = 0;
+}
+
 void IVB_CAP(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 {
 	switch (Proc->Uncore.Bus.IVB_Cap.DMFC) {
@@ -1886,7 +2053,6 @@ void IVB_CAP(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 	case 0b000:
 		switch (Proc->ArchID) {
 		case IvyBridge:
-		case IvyBridge_EP:
 			Shm->Uncore.CtrlSpeed = 2933;
 			break;
 		case Haswell_DT:
@@ -2554,8 +2720,9 @@ void Uncore(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 		SET_CHIPSET(IC_IBEXPEAK);
 		break;
 	case PCI_DEVICE_ID_INTEL_SBRIDGE_IMC_HA0:   /* Sandy Bridge-E	*/
+		SNB_EP_CAP(Shm, Proc, Core);
+		SNB_EP_IMC(Shm, Proc);
 		SET_CHIPSET(IC_PATSBURG);
-		/* TODO: IMC decoding */
 		break;
 	case PCI_DEVICE_ID_INTEL_SBRIDGE_IMC_SA:    /* SNB Desktop	*/
 		SNB_CAP(Shm, Proc, Core);
@@ -2567,8 +2734,9 @@ void Uncore(SHM_STRUCT *Shm, PROC *Proc, CORE *Core)
 		SNB_IMC(Shm, Proc);
 		SET_CHIPSET(IC_IBEXPEAK_M);
 		break;
-	case PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA0:   /* Ivy Bridge/Xeon v2 */
-		/* TODO: IMC decoding */
+	case PCI_DEVICE_ID_INTEL_IVB_EP_HOST_BRIDGE:  /* Xeon E5 & E7 v2 */
+		SNB_EP_CAP(Shm, Proc, Core);
+		SNB_EP_IMC(Shm, Proc);
 		SET_CHIPSET(IC_CAVECREEK);
 		break;
 	case PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_SA:    /* IVB Desktop	*/
@@ -2799,7 +2967,7 @@ void CPUID_Dump(SHM_STRUCT *Shm, CORE **Core, unsigned int cpu)
 	}
 }
 
-unsigned int Compute_Way(unsigned int value)
+unsigned int AMD_L2_L3_Way_Associativity(unsigned int value)
 {
 	switch (value) {
 	case 0x6:
@@ -2831,65 +2999,69 @@ void Topology(SHM_STRUCT *Shm, PROC *Proc, CORE **Core, unsigned int cpu)
 	Shm->Cpu[cpu].Topology.MP.x2APIC = ((Proc->Features.Std.ECX.x2APIC
 					    & Core[cpu]->T.Base.EN)
 					   << Core[cpu]->T.Base.EXTD);
+	/* AMD Core Complex ID						*/
+    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD) {
+	Shm->Cpu[cpu].Topology.MP.CCX = (Core[cpu]->T.ApicID & 0b1000) >> 3;
+    }
 	unsigned int loop;
-	for (loop = 0; loop < CACHE_MAX_LEVEL; loop++)
+    for (loop = 0; loop < CACHE_MAX_LEVEL; loop++)
+    {
+      if (Core[cpu]->T.Cache[loop].Type > 0)
+      {
+	unsigned int level = Core[cpu]->T.Cache[loop].Level;
+	if (Core[cpu]->T.Cache[loop].Type == 2) /* Instruction	*/
+		level = 0;
+
+	if (Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL)
 	{
-	    if (Core[cpu]->T.Cache[loop].Type > 0)
+		Shm->Cpu[cpu].Topology.Cache[level].Set =		\
+					Core[cpu]->T.Cache[loop].Set + 1;
+
+		Shm->Cpu[cpu].Topology.Cache[level].LineSz =		\
+					Core[cpu]->T.Cache[loop].LineSz + 1;
+
+		Shm->Cpu[cpu].Topology.Cache[level].Part =		\
+					Core[cpu]->T.Cache[loop].Part + 1;
+
+		Shm->Cpu[cpu].Topology.Cache[level].Way =		\
+					Core[cpu]->T.Cache[loop].Way + 1;
+
+		Shm->Cpu[cpu].Topology.Cache[level].Size =		\
+				  Shm->Cpu[cpu].Topology.Cache[level].Set
+				* Shm->Cpu[cpu].Topology.Cache[level].LineSz
+				* Shm->Cpu[cpu].Topology.Cache[level].Part
+				* Shm->Cpu[cpu].Topology.Cache[level].Way;
+	} else {
+	    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
 	    {
-		unsigned int level=Core[cpu]->T.Cache[loop].Level;
-		if (Core[cpu]->T.Cache[loop].Type == 2) /* Instruction	*/
-			level = 0;
+		Shm->Cpu[cpu].Topology.Cache[level].Way=(loop == 2)||(loop == 3)?
+			AMD_L2_L3_Way_Associativity(Core[cpu]->T.Cache[loop].Way)
+			: Core[cpu]->T.Cache[loop].Way;
 
-		if(Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL)
-		{
-			Shm->Cpu[cpu].Topology.Cache[level].Set =
-				Core[cpu]->T.Cache[loop].Set + 1;
-
-			Shm->Cpu[cpu].Topology.Cache[level].LineSz =
-				Core[cpu]->T.Cache[loop].LineSz + 1;
-
-			Shm->Cpu[cpu].Topology.Cache[level].Part =
-				Core[cpu]->T.Cache[loop].Part + 1;
-
-			Shm->Cpu[cpu].Topology.Cache[level].Way =
-				Core[cpu]->T.Cache[loop].Way + 1;
-
-			Shm->Cpu[cpu].Topology.Cache[level].Size =
-			  Shm->Cpu[cpu].Topology.Cache[level].Set
-			* Shm->Cpu[cpu].Topology.Cache[level].LineSz
-			* Shm->Cpu[cpu].Topology.Cache[level].Part
-			* Shm->Cpu[cpu].Topology.Cache[level].Way;
-		}
-		else {
-		    if(Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
-		    {
-			Shm->Cpu[cpu].Topology.Cache[level].Way =
-			    (loop != 2) ?
-				  Core[cpu]->T.Cache[loop].Way
-				: Compute_Way(Core[cpu]->T.Cache[loop].Way);
-
-			Shm->Cpu[cpu].Topology.Cache[level].Size =
-				Core[cpu]->T.Cache[loop].Size;
-		    }
-		}
-		Shm->Cpu[cpu].Topology.Cache[level].Feature.WriteBack =
-			Core[cpu]->T.Cache[loop].WrBack;
-		Shm->Cpu[cpu].Topology.Cache[level].Feature.Inclusive =
-			Core[cpu]->T.Cache[loop].Inclus;
+		Shm->Cpu[cpu].Topology.Cache[level].Size =		\
+						Core[cpu]->T.Cache[loop].Size;
 	    }
 	}
+	Shm->Cpu[cpu].Topology.Cache[level].Feature.WriteBack = 	\
+						Core[cpu]->T.Cache[loop].WrBack;
+
+	Shm->Cpu[cpu].Topology.Cache[level].Feature.Inclusive = 	\
+						Core[cpu]->T.Cache[loop].Inclus;
+      }
+    }
 	/* Apply various architecture size unit.			*/
-	switch (Proc->ArchID) {
-	case AMD_Family_15h:
+    switch (Proc->ArchID) {
+    case AMD_Family_15h:
 	/*TODO: do models 60h & 70h need a 512 KB size unit adjustment ? */
-		if ((Shm->Proc.Features.Std.EAX.ExtModel == 0x6)
-		 || (Shm->Proc.Features.Std.EAX.ExtModel == 0x7))
-			break;
-		/* Fallthrough */
-	case AMD_Family_17h:
-		Shm->Cpu[cpu].Topology.Cache[3].Size *= 512;
+	if ((Shm->Proc.Features.Std.EAX.ExtModel == 0x6)
+	 || (Shm->Proc.Features.Std.EAX.ExtModel == 0x7))
 		break;
-	}
+	/* Fallthrough */
+    case AMD_Family_17h:
+	/* CPUID_Fn80000006_EDX: Value in [3FFFh - 0001h] = (<Value> *0.5) MB */
+	Shm->Cpu[cpu].Topology.Cache[3].Size *= (512 / 2);
+	break;
+    }
 }
 
 void CStates(SHM_STRUCT *Shm, CORE **Core, unsigned int cpu)
@@ -3268,7 +3440,7 @@ void UpdateFeatures(REF *Ref)
 void Master_Ring_Handler(REF *Ref, unsigned int rid)
 {
     if (!RING_NULL(Ref->Shm->Ring[rid])) {
-	RING_CTRL ctrl __attribute__ ((aligned(128)));
+	RING_CTRL ctrl __attribute__ ((aligned(16)));
 	RING_READ(Ref->Shm->Ring[rid], ctrl);
 	int rc = ioctl(Ref->fd->Drv, ctrl.cmd, ctrl.arg);
 	if (Quiet & 0x100)
@@ -3295,7 +3467,7 @@ void Child_Ring_Handler(REF *Ref, unsigned int rid)
 {
   if (!RING_NULL(Ref->Shm->Ring[rid]))
   {
-	RING_CTRL ctrl __attribute__ ((aligned(128)));
+	RING_CTRL ctrl __attribute__ ((aligned(16)));
 	RING_READ(Ref->Shm->Ring[rid], ctrl);
 
    switch (ctrl.cmd)
@@ -3303,15 +3475,17 @@ void Child_Ring_Handler(REF *Ref, unsigned int rid)
    case COREFREQ_ORDER_MACHINE:
 	switch (ctrl.arg) {
 	case COREFREQ_TOGGLE_OFF:
-	    if (BITVAL(Ref->Shm->Proc.Sync, 31)) {
+	    if (BITVAL(Ref->Shm->Proc.Sync, 31))
+	    {
 		BITCLR(BUS_LOCK, Ref->Shm->Proc.Sync, 31);
 
-		while (BITWISEAND(BUS_LOCK, roomCore, roomSeed))
+		while (BITWISEAND_CC(BUS_LOCK, roomCore, roomSeed))
 		{
 			if (BITVAL(Shutdown, 0))	/* SpinLock */
 				break;
 		}
-		roomSched = 0;
+		BITSTOR_CC(BUS_LOCK, roomSched, roomClear);
+
 		Ref->Slice.Func = Slice_NOP;
 		Ref->Slice.arg = 0;
 		Ref->Slice.pattern = RESET_CSP;
@@ -3332,7 +3506,7 @@ void Child_Ring_Handler(REF *Ref, unsigned int rid)
       {
        if (!BITVAL(Ref->Shm->Proc.Sync, 31))
        {
-	while (BITWISEAND(BUS_LOCK, roomCore, roomSeed))
+	while (BITWISEAND_CC(BUS_LOCK, roomCore, roomSeed))
 	{
 		if (BITVAL(Shutdown, 0))	/* SpinLock */
 			break;
@@ -3485,8 +3659,9 @@ REASON_CODE Core_Manager(REF *Ref)
   {
     while (!BITVAL(Shutdown, 0))
     {	/* Loop while all the cpu room bits are not cleared.		*/
-	while (!BITVAL(Shutdown, 0)
-	    && BITWISEAND(BUS_LOCK, roomCore, roomSeed))
+	while ( !BITVAL(Shutdown, 0) && !(Shm->Proc.Features.Std.ECX.CMPXCHG16 ?
+	    BITCMP_CC(Shm->Proc.CPU.Count, BUS_LOCK, roomCore, roomClear)
+	    : BITZERO(BUS_LOCK, roomCore[CORE_WORD_TOP(CORE_COUNT)])) )
 	{
 		nanosleep(&Shm->Sleep.pollingWait, NULL);
 	}
@@ -3508,6 +3683,17 @@ REASON_CODE Core_Manager(REF *Ref)
 	Shm->Proc.Avg.C7    = 0;
 	Shm->Proc.Avg.C1    = 0;
 	maxRelFreq	    = 0.0;
+
+	switch (Shm->Proc.powerFormula) {
+	case POWER_FORMULA_AMD_17h:
+		Proc->Delta.Power.ACCU[PWR_DOMAIN(CORES)] = 0;
+		break;
+	case POWER_FORMULA_INTEL:
+	case POWER_FORMULA_INTEL_ATOM:
+	case POWER_FORMULA_AMD:
+	case POWER_FORMULA_NONE:
+		break;
+	}
 
 	for (cpu=0; !BITVAL(Shutdown,0) && (cpu < Shm->Proc.CPU.Count); cpu++)
 	{
@@ -3575,22 +3761,41 @@ REASON_CODE Core_Manager(REF *Ref)
 			Shm->Proc.Top = cpu;
 		}
 		/* Workaround to Package Thermal Management: the hottest Core */
-		if (!Shm->Proc.Features.Power.EAX.PTM) {
-		    switch (Shm->Proc.thermalFormula) {
-		    case THERMAL_FORMULA_INTEL:
+		switch (Shm->Proc.thermalFormula) {
+		case THERMAL_FORMULA_INTEL:
+		    if (!Shm->Proc.Features.Power.EAX.PTM) {
 			if (CFlop->Thermal.Sensor < PFlip->Thermal.Sensor)
 				PFlip->Thermal.Sensor = CFlop->Thermal.Sensor;
+		    }
 			break;
-		    case THERMAL_FORMULA_AMD:
-		    case THERMAL_FORMULA_AMD_0Fh:
-		    case THERMAL_FORMULA_AMD_15h:
-		    case THERMAL_FORMULA_AMD_17h:
+		case THERMAL_FORMULA_AMD:
+		case THERMAL_FORMULA_AMD_0Fh:
+		case THERMAL_FORMULA_AMD_15h:
+		    if (!Shm->Proc.Features.Power.EAX.PTM) {
 			if (CFlop->Thermal.Sensor > PFlip->Thermal.Sensor)
 				PFlip->Thermal.Sensor = CFlop->Thermal.Sensor;
-			break;
-		    case THERMAL_FORMULA_NONE:
-			break;
 		    }
+			break;
+		case THERMAL_FORMULA_AMD_17h:
+		    if (!Shm->Proc.Features.Power.EAX.PTM) {
+			if (CFlop->Thermal.Sensor > PFlip->Thermal.Sensor)
+				PFlip->Thermal.Sensor = CFlop->Thermal.Sensor;
+		    }
+			break;
+		case THERMAL_FORMULA_NONE:
+			break;
+		}
+		/* Workaround to RAPL Package counter: sum of all Cores */
+		switch (Shm->Proc.powerFormula) {
+		case POWER_FORMULA_AMD_17h:
+			Proc->Delta.Power.ACCU[PWR_DOMAIN(CORES)] += \
+				Core[cpu]->Delta.Power.ACCU;
+			break;
+		case POWER_FORMULA_INTEL:
+		case POWER_FORMULA_INTEL_ATOM:
+		case POWER_FORMULA_AMD:
+		case POWER_FORMULA_NONE:
+			break;
 		}
 		/* Sum counters.					*/
 		Shm->Proc.Avg.Turbo += CFlop->State.Turbo;
@@ -3644,9 +3849,8 @@ REASON_CODE Core_Manager(REF *Ref)
 		Shm->Proc.State.Energy[pw] = (double) PFlip->Delta.ACCU[pw]
 					   * Shm->Proc.Power.Unit.Joules;
 
-		Shm->Proc.State.Power[pw] =(double) PFlip->Delta.ACCU[pw]
-					  * Shm->Proc.Power.Unit.Watts
-					  * Shm->Proc.Power.Unit.Times;
+		Shm->Proc.State.Power[pw] = (1000.0*Shm->Proc.State.Energy[pw])
+					  / (double) Shm->Sleep.Interval;
 	    }
 		/* Package thermal formulas				*/
 	    if (Shm->Proc.Features.Power.EAX.PTM) {
@@ -3729,7 +3933,7 @@ REASON_CODE Core_Manager(REF *Ref)
 		BITSET(LOCKLESS, Shm->Proc.Sync, 0);
 	}
 	/* Reset the Room mask						*/
-	BITMSK(BUS_LOCK, roomCore, Shm->Proc.CPU.Count);
+	BITSTOR_CC(BUS_LOCK, roomCore, roomSeed);
     }
     for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++) {
 	if (Arg[cpu].TID)
@@ -3794,7 +3998,7 @@ REASON_CODE Child_Manager(REF *Ref)
 	return(reason);
 }
 
-REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
+REASON_CODE Shm_Manager(FD *fd, PROC *Proc, uid_t uid, uid_t gid, mode_t cmask)
 {
 	unsigned int	cpu = 0;
 	CORE		**Core;
@@ -3817,23 +4021,38 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
 		REASON_SET(reason, RC_SHM_MMAP);
 	}
     }
+    if (reason.rc == RC_SUCCESS) {
+	if (gid != 0) {
+		if (setregid(-1, gid) != 0) {
+			REASON_SET(reason, RC_SYS_CALL);
+		}
+	}
+    }
+    if (reason.rc == RC_SUCCESS) {
+	if (uid != 0) {
+		if (setreuid(-1, uid) != 0) {
+			REASON_SET(reason, RC_SYS_CALL);
+		}
+	}
+    }
+    if (reason.rc == RC_SUCCESS) {
+	umask(cmask);
+    }
     if (reason.rc == RC_SUCCESS)
     {	/* Initialize shared memory.					*/
 	const size_t ShmCpuSize = sizeof(CPU_STRUCT) * Proc->CPU.Count,
 			ShmSize = ROUND_TO_PAGES((sizeof(SHM_STRUCT)
 				+ ShmCpuSize));
 
-	umask(!S_IRUSR|!S_IWUSR|!S_IRGRP|!S_IWGRP|!S_IROTH|!S_IWOTH);
-
-	if ((fd->Svr = shm_open(SHM_FILENAME, O_CREAT|O_TRUNC|O_RDWR,
+      if ((fd->Svr = shm_open(SHM_FILENAME, O_CREAT|O_TRUNC|O_RDWR,
 					 S_IRUSR|S_IWUSR
 					|S_IRGRP|S_IWGRP
 					|S_IROTH|S_IWOTH)) != -1)
-	{
-	  pid_t CPID = -1;
+      {
+	pid_t CPID = -1;
 
-	  if (ftruncate(fd->Svr, ShmSize) != -1)
-	  {
+	if (ftruncate(fd->Svr, ShmSize) != -1)
+	{
 	    if ((Shm = mmap(NULL, ShmSize,
 				PROT_READ|PROT_WRITE, MAP_SHARED,
 				fd->Svr, 0)) != MAP_FAILED)
@@ -3842,6 +4061,10 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
 		size_t len;
 		/* Clear SHM						*/
 		memset(Shm, 0, ShmSize);
+		/* Store version footprint into SHM			*/
+		SET_FOOTPRINT(Shm->FootPrint,	COREFREQ_MAJOR,
+						COREFREQ_MINOR,
+						COREFREQ_REV	);
 		/* Store the daemon gate name.				*/
 		len = KMIN(sizeof(SHM_FILENAME), TASK_COMM_LEN - 1);
 		memcpy(Shm->ShmName, SHM_FILENAME, len);
@@ -3876,8 +4099,9 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
 
 		/* Welcomes with brand and per CPU base clock.		*/
 		if (Quiet & 0x001)
-		 printf("CoreFreq Daemon "COREFREQ_VERSION		\
-			"  Copyright (C) 2015-2019 CYRIL INGENIERIE\n");
+		 printf("CoreFreq Daemon %s"		\
+			"  Copyright (C) 2015-2019 CYRIL INGENIERIE\n",
+			COREFREQ_VERSION);
 		if (Quiet & 0x010)
 		 printf("\n"						\
 			"  Processor [%s]\n"				\
@@ -3910,17 +4134,27 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
 		default:
 			reason = Core_Manager(&Ref);
 
+			if (gid != 0) {
+				if (setregid(-1, 0) != 0) {
+					REASON_SET(reason, RC_SYS_CALL);
+				}
+			}
+			if (uid != 0) {
+				if (setreuid(-1, 0) != 0) {
+					REASON_SET(reason, RC_SYS_CALL);
+				}
+			}
 			if (Shm->AppCli) {
-			    if (kill(Shm->AppCli, SIGCHLD) == -1) {
-				REASON_SET(reason, RC_EXEC_ERR);
-			    }
+				if (kill(Shm->AppCli, SIGCHLD) == -1) {
+					REASON_SET(reason, RC_EXEC_ERR);
+				}
 			}
 			SysGate_OnDemand(&Ref, 0);
 
 			if (kill(Ref.CPID, SIGQUIT) == 0) {
-			    if (waitpid(Ref.CPID, NULL, 0) == -1) {
-				REASON_SET(reason, RC_EXEC_ERR);
-			    }
+				if (waitpid(Ref.CPID, NULL, 0) == -1) {
+					REASON_SET(reason, RC_EXEC_ERR);
+				}
 			} else {
 				REASON_SET(reason, RC_EXEC_ERR);
 			}
@@ -3934,20 +4168,20 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc)
 	    } else {
 		REASON_SET(reason, RC_SHM_MMAP);
 	    }
-	  } else {
-		REASON_SET(reason, RC_SHM_FILE);
-	  }
-	  if (close(fd->Svr) == -1) {
-		REASON_SET(reason, RC_SHM_FILE);
-	  }
-	  if (CPID != 0) {
-	    if (shm_unlink(SHM_FILENAME) == -1) {
-		REASON_SET(reason, RC_SHM_FILE);
-	    }
-	  }
 	} else {
 		REASON_SET(reason, RC_SHM_FILE);
 	}
+	if (close(fd->Svr) == -1) {
+		REASON_SET(reason, RC_SHM_FILE);
+	}
+	if (CPID != 0) {
+	    if (shm_unlink(SHM_FILENAME) == -1) {
+		REASON_SET(reason, RC_SHM_FILE);
+	    }
+	}
+      } else {
+		REASON_SET(reason, RC_SHM_FILE);
+      }
     }
     for (cpu = 0; cpu < Proc->CPU.Count; cpu++)
     {
@@ -3978,6 +4212,9 @@ REASON_CODE Help(REASON_CODE reason, ...)
 			"\t-d\t\tDebug\n"				\
 			"\t-gon\t\tEnable SysGate\n"			\
 			"\t-goff\t\tDisable SysGate\n"			\
+			"\t-U <decimal>\tSet the effective user ID\n"	\
+			"\t-G <decimal>\tSet the effective group ID\n"	\
+			"\t-M <octal>\tSet the mode creation mask\n"	\
 			"\t-h\t\tPrint out this message\n"		\
 			"\t-v\t\tPrint the version number\n"		\
 			"\nExit status:\n"				\
@@ -4025,6 +4262,8 @@ int main(int argc, char *argv[])
 {
 	FD   fd = {0, 0};
 	PROC *Proc = NULL;	/* Kernel module anchor point.		*/
+	uid_t uid = 0, gid = 0;
+	mode_t cmask = !S_IRUSR|!S_IWUSR|!S_IRGRP|!S_IWGRP|!S_IROTH|!S_IWOTH;
 
 	char *program = strdup(argv[0]),
 		*appName = program != NULL ? basename(program) : argv[0];
@@ -4061,8 +4300,47 @@ int main(int argc, char *argv[])
 				}
 				break;
 			case 'v':
-				printf(COREFREQ_VERSION"\n");
+				printf("%s\n", COREFREQ_VERSION);
 				reason.rc = RC_CMD_SYNTAX;
+				break;
+			case 'U': {
+				char trailing =  '\0';
+			    if (argv[++i] == NULL) {
+					REASON_SET(reason, RC_CMD_SYNTAX, 0);
+					reason = Help(reason, appName);
+			    } else if (sscanf(argv[i], "%d%c",
+							&uid,
+							&trailing) != 1) {
+					REASON_SET(reason, RC_CMD_SYNTAX);
+					reason = Help(reason, appName);
+			    }
+			}
+				break;
+			case 'G': {
+				char trailing =  '\0';
+			    if (argv[++i] == NULL) {
+					REASON_SET(reason, RC_CMD_SYNTAX, 0);
+					reason = Help(reason, appName);
+			    } else if (sscanf(argv[i], "%d%c",
+							&gid,
+							&trailing) != 1) {
+					REASON_SET(reason, RC_CMD_SYNTAX);
+					reason = Help(reason, appName);
+			    }
+			}
+				break;
+			case 'M': {
+				char trailing =  '\0';
+			    if (argv[++i] == NULL) {
+				REASON_SET(reason, RC_CMD_SYNTAX, 0);
+				reason = Help(reason, appName);
+			    } else if (sscanf(argv[i] , "%o%c",
+							&cmask,
+							&trailing) != 1) {
+					REASON_SET(reason, RC_CMD_SYNTAX);
+					reason = Help(reason, appName);
+			    }
+			}
 				break;
 			case 'h':
 			default: {
@@ -4092,7 +4370,11 @@ int main(int argc, char *argv[])
 				PROT_READ|PROT_WRITE, MAP_SHARED,
 				fd.Drv, 0)) != MAP_FAILED)
 		{
-			reason = Shm_Manager(&fd, Proc);
+		    if (CHK_FOOTPRINT(Proc->FootPrint,	COREFREQ_MAJOR,
+							COREFREQ_MINOR,
+							COREFREQ_REV)	)
+		    {
+			reason = Shm_Manager(&fd, Proc, uid, gid, cmask);
 
 			switch (reason.rc) {
 			case RC_SUCCESS:
@@ -4115,6 +4397,16 @@ int main(int argc, char *argv[])
 				REASON_SET(reason, RC_SHM_MMAP);
 				reason = Help(reason, DRV_FILENAME);
 			}
+		    } else {
+			char wrongVersion[22+1];
+			sprintf(wrongVersion, "Version %hhd.%hhd.%hhd",
+				Proc->FootPrint.major,
+				Proc->FootPrint.minor,
+				Proc->FootPrint.rev);
+			munmap(Proc, packageSize);
+			REASON_SET(reason, RC_SHM_MMAP, EACCES);
+			reason = Help(reason, wrongVersion);
+		    }
 		} else {
 			REASON_SET(reason, RC_SHM_MMAP);
 			reason = Help(reason, DRV_FILENAME);
@@ -4137,3 +4429,4 @@ int main(int argc, char *argv[])
     }
 	return(reason.rc);
 }
+

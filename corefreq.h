@@ -8,7 +8,7 @@
 
 typedef struct
 {
-	Bit64				OffLine __attribute__ ((aligned (64)));
+	Bit64				OffLine __attribute__ ((aligned (8)));
 
 	unsigned int			Toggle;
 
@@ -34,8 +34,10 @@ typedef struct
 					ThreadID,
 					PackageID;
 		struct {
-			Bit32		BSP,
-					x2APIC;
+			unsigned short	x2APIC	:  8-0,
+					CCX	: 12-8,
+					_pad8	: 15-12,
+					BSP	: 16-15;
 		} MP;
 		struct {
 		unsigned int		Set,
@@ -94,7 +96,7 @@ typedef struct
 					C7,
 					TSC,
 					C1;
-		} Delta;
+		} Delta __attribute__ ((aligned (8)));
 
 		CLOCK			Clock;
 
@@ -161,16 +163,16 @@ typedef struct
 		} Counter[3];
 
 		unsigned long long	Error;
-	} Slice;
+	} Slice __attribute__ ((aligned (8)));
 } CPU_STRUCT;
 
 typedef struct
 {
-	volatile unsigned long long	Sync __attribute__ ((aligned (128)));
+	volatile unsigned long long	Sync __attribute__ ((aligned (8)));
 
 	FEATURES			Features;
 
-	Bit64			PowerNow	__attribute__ ((aligned (64)));
+	Bit64			PowerNow	__attribute__ ((aligned (8)));
 
 	struct {
 		unsigned long long
@@ -232,7 +234,7 @@ typedef struct
 					Temp;
 		enum THERM_PWR_EVENTS	Events;
 		} Thermal;
-	} FlipFlop[2];
+	} FlipFlop[2] __attribute__ ((aligned (8)));
 
 	struct {
 		double			PC02,
@@ -270,6 +272,8 @@ typedef struct
 
 typedef struct
 {
+	FOOTPRINT		FootPrint;
+
 	struct {
 		signed int	AutoClock, /* 10: Auto, 01: Init, 00: Specs */
 				Experimental,/* 0: Disable, 1: Enable	*/
@@ -285,7 +289,7 @@ typedef struct
 	} Registration;
 
 	struct {
-		Bit64		Operation	__attribute__ ((aligned (64)));
+		Bit64		Operation	__attribute__ ((aligned (8)));
 
 		OS_DRIVER	OS;
 
@@ -321,7 +325,7 @@ typedef struct
 	} Sleep;
 
 	struct {
-		RING_CTRL	buffer[RING_SIZE] __attribute__((aligned(128)));
+		RING_CTRL	buffer[RING_SIZE] __attribute__((aligned(16)));
 		unsigned int	head, tail;
 	} Ring[2]; /* [0] Parent ; [1] Child				*/
 
@@ -419,3 +423,4 @@ typedef struct {
 	REASON_CODE _reason = {.no = 0, .ln = 0, .rc = RC_SUCCESS}
 
 #define IS_REASON_SUCCESSFUL(_reason) (_reason.rc == RC_SUCCESS)
+

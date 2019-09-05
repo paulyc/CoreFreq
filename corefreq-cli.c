@@ -31,10 +31,20 @@
 
 SHM_STRUCT *Shm = NULL;
 
-static Bit64 Shutdown __attribute__ ((aligned (64))) = 0x0;
+static Bit64 Shutdown __attribute__ ((aligned (8))) = 0x0;
 
 SERVICE_PROC localService = {.Proc = -1};
 
+struct {
+	unsigned int
+	fahrCels:  1-0, /* 0:Celsius || 1:Fahrenheit	*/
+	secret	:  2-1, /* 0:Show || 1:Hide Secret Data */
+	_padding: 32-2;
+} Setting = {
+	.fahrCels=0,
+	.secret = 1,
+	._padding=0
+};
 
 int ClientFollowService(SERVICE_PROC *pSlave, SERVICE_PROC *pMaster, pid_t pid)
 {
@@ -156,7 +166,7 @@ TGrid *Print_v1(CELL_FUNC OutFunc,
     else {
 	ASCII *item = malloc(width + 1);
       if (item != NULL) {
-	sprintf((char *)item, "%s%s%.*s", Indent[1][tab], line,
+	snprintf((char *)item, width + 1, "%s%s%.*s", Indent[1][tab], line,
 		(int)(width - strlen(line) - strlen(Indent[1][tab])), hSpace);
 
 	pGrid = OutFunc(win, key, attrib, item);
@@ -259,13 +269,13 @@ REASON_CODE SysInfoCPUID(Window *win, CUINT width, CELL_FUNC OutFunc)
 	for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++) {
 	    if (OutFunc == NULL) {
 		PUT(SCANKEY_NULL, attrib[0], width, 0,
-			"CPU #%-2u function"				\
-			"          EAX          EBX          ECX          EDX",
+			"CPU #%-3u function"				\
+			"         EAX          EBX          ECX          EDX",
 			cpu);
 	    } else {
 		PUT(SCANKEY_NULL,
 			attrib[BITVAL(Shm->Cpu[cpu].OffLine, OS)],
-			width, 0, "CPU #%-2u", cpu);
+			width, 0, "CPU #%-3u", cpu);
 	    }
 	    if (!BITVAL(Shm->Cpu[cpu].OffLine, OS)) {
 		PUT(SCANKEY_NULL, attrib[3], width, 2, format,
@@ -553,10 +563,10 @@ void RefreshBaseClock(TGrid *grid, DATA_TYPE data)
 {
 	struct FLIP_FLOP *CFlop = &Shm->Cpu[Shm->Proc.Service.Core] \
 			.FlipFlop[!Shm->Cpu[Shm->Proc.Service.Core].Toggle];
-	char item[6+1];
-	sprintf(item, "%6.2f", CFlop->Clock.Hz / 1000000.0);
+	char item[8+1];
+	snprintf(item, 8+1, "%7.3f", CFlop->Clock.Hz / 1000000.0);
 
-	memcpy(&grid->cell.item[grid->cell.length - 8], item, 6);
+	memcpy(&grid->cell.item[grid->cell.length - 9], item, 7);
 }
 
 void RefreshRatioFreq(TGrid *grid, DATA_TYPE data)
@@ -564,9 +574,9 @@ void RefreshRatioFreq(TGrid *grid, DATA_TYPE data)
 	struct FLIP_FLOP *CFlop = &Shm->Cpu[Shm->Proc.Service.Core] \
 			.FlipFlop[!Shm->Cpu[Shm->Proc.Service.Core].Toggle];
 	double freq = ((*data.puint) * CFlop->Clock.Hz) / 1000000.0;
-	char item[4+7+1];
-	sprintf(item, "%4d%7.2f", (*data.puint),
-		(freq > 0.0) && (freq < 10000.0) ? freq : NAN);
+	char item[10+8+1];
+	snprintf(item, 10+8+1, "%4d%7.2f",
+		(*data.puint), (freq > 0.0) && (freq < 10000.0) ? freq : NAN);
 
 	memcpy(&grid->cell.item[23], &item[4], 7);
 	memcpy(&grid->cell.item[51], &item[0], 4);
@@ -608,26 +618,26 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
 		Shm->Cpu[Shm->Proc.Service.Core].Query.Microcode);
 
 	PUT(SCANKEY_NULL, attrib[2], width, 2,
-		"%s""%.*s[%2X%1X_%1X%1X]", RSC(SIGNATURE).CODE(),
-		width - 11 - RSZ(SIGNATURE), hSpace,
+		"%s""%.*s[%3X%1X_%1X%1X]", RSC(SIGNATURE).CODE(),
+		width - 12 - RSZ(SIGNATURE), hSpace,
 		Shm->Proc.Features.Std.EAX.ExtFamily,
 		Shm->Proc.Features.Std.EAX.Family,
 		Shm->Proc.Features.Std.EAX.ExtModel,
 		Shm->Proc.Features.Std.EAX.Model);
 
 	PUT(SCANKEY_NULL, attrib[2], width, 2,
-		"%s""%.*s[%6u]", RSC(STEPPING).CODE(),
-		width - 11 - RSZ(STEPPING), hSpace,
+		"%s""%.*s[%7u]", RSC(STEPPING).CODE(),
+		width - 12 - RSZ(STEPPING), hSpace,
 		Shm->Proc.Features.Std.EAX.Stepping);
 
 	PUT(SCANKEY_NULL, attrib[2], width, 2,
-		"%s""%.*s[ %2u/%-2u]", RSC(ONLINE_CPU).CODE(),
-		width - 11 - RSZ(ONLINE_CPU), hSpace,
+		"%s""%.*s[%3u/%3u]", RSC(ONLINE_CPU).CODE(),
+		width - 12 - RSZ(ONLINE_CPU), hSpace,
 		Shm->Proc.CPU.OnLine, Shm->Proc.CPU.Count);
 
 	GridCall(PUT(SCANKEY_NULL, attrib[2], width, 2,
-			"%s""%.*s[%6.2f]", RSC(BASE_CLOCK).CODE(),
-			width - 11 - RSZ(BASE_CLOCK), hSpace,
+			"%s""%.*s[%7.3f]", RSC(BASE_CLOCK).CODE(),
+			width - 12 - RSZ(BASE_CLOCK), hSpace,
 			CFlop->Clock.Hz / 1000000.0),
 		RefreshBaseClock);
 
@@ -672,9 +682,9 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
 		RefreshRatioFreq, &Shm->Proc.Boost[BOOST(MAX)]);
     }
 
-	PUT(SCANKEY_NULL, attrib[0], width, 2, "%s""%.*s[%6.2f]",
+	PUT(SCANKEY_NULL, attrib[0], width, 2, "%s""%.*s[%7.3f]",
 		RSC(FACTORY).CODE(),
-		(OutFunc == NULL ? 69 : 65) - RSZ(FACTORY), hSpace,
+		(OutFunc == NULL ? 68 : 64) - RSZ(FACTORY), hSpace,
 			Shm->Proc.Features.Factory.Clock.Hz / 1000000.0);
 
 	PUT(SCANKEY_NULL, attrib[3], width, 0,
@@ -732,7 +742,7 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
 
 	PUT(SCANKEY_NULL, attrib[Shm->Proc.Features.Turbo_Unlock],
 		width, 2,
-		"Turbo Boost%.*s[%.*s]", width - 22, hSpace, 6,
+		"Turbo Boost%.*s[%7.*s]", width - 23, hSpace, 6,
 			Shm->Proc.Features.Turbo_Unlock ?
 				RSC(UNLOCK).CODE() : RSC(LOCK).CODE());
 
@@ -759,7 +769,7 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
 			boost--, activeCores++)
 	{
 	CLOCK_ARG clockMod={.NC=BOXKEY_TURBO_CLOCK_NC | activeCores,.Offset=0};
-	char pfx[4];
+	char pfx[11+1];
 	sprintf(pfx, "%2uC", activeCores);
 	GridCall(PrintRatioFreq(win, CFlop,
 				0, pfx, &Shm->Proc.Boost[boost],
@@ -771,7 +781,7 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
       for (boost = BOOST(1C), activeCores = 1;
 		boost > BOOST(1C) - Shm->Proc.Features.SpecTurboRatio;
 			boost--, activeCores++) {
-	char pfx[4];
+	char pfx[11+1];
 	sprintf(pfx, "%2uC", activeCores);
 	GridCall(PrintRatioFreq(win, CFlop,
 				0, pfx, &Shm->Proc.Boost[boost],
@@ -781,7 +791,7 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
       }
 
 	PUT(SCANKEY_NULL, attrib[Shm->Proc.Features.Uncore_Unlock],
-		width, 2, "Uncore%.*s[%.*s]", width - 17, hSpace, 6,
+		width, 2, "Uncore%.*s[%7.*s]", width - 18, hSpace, 6,
 			Shm->Proc.Features.Uncore_Unlock ?
 				RSC(UNLOCK).CODE() : RSC(LOCK).CODE());
 
@@ -822,25 +832,25 @@ REASON_CODE SysInfoProc(Window *win, CUINT width, CELL_FUNC OutFunc)
       if (pfx != NULL)
       {
 	PUT(SCANKEY_NULL, attrib[0], width, 2,
-		"TDP%.*s""%s"" [%3d:%-2d]",
-		width - 15 - RSZ(LEVEL), hSpace, RSC(LEVEL).CODE(),
+		"TDP%.*s""%s"" [%3d:%-3d]",
+		width - 16 - RSZ(LEVEL), hSpace, RSC(LEVEL).CODE(),
 		Shm->Proc.Features.TDP_Cfg_Level,Shm->Proc.Features.TDP_Levels);
 
 	PUT(SCANKEY_NULL, attrib[Shm->Proc.Features.TDP_Unlock == 1],
-		width, 3, "%s%.*s[%.*s]", RSC(PROGRAMMABLE).CODE(),
-		width - (OutFunc == NULL ? 14:12) - RSZ(PROGRAMMABLE), hSpace,
+		width, 3, "%s%.*s[%7.*s]", RSC(PROGRAMMABLE).CODE(),
+		width - (OutFunc == NULL ? 15:13) - RSZ(PROGRAMMABLE), hSpace,
 			6, Shm->Proc.Features.TDP_Unlock == 1 ?
 				RSC(UNLOCK).CODE() : RSC(LOCK).CODE());
 
 	PUT(SCANKEY_NULL, attrib[Shm->Proc.Features.TDP_Cfg_Lock == 0],
-		width, 3, "%s%.*s[%.*s]", RSC(CONFIGURATION).CODE(),
-		width - (OutFunc == NULL ? 14:12) - RSZ(CONFIGURATION),hSpace,
+		width, 3, "%s%.*s[%7.*s]", RSC(CONFIGURATION).CODE(),
+		width - (OutFunc == NULL ? 15:13) - RSZ(CONFIGURATION),hSpace,
 			6, Shm->Proc.Features.TDP_Cfg_Lock == 1 ?
 				RSC(LOCK).CODE() : RSC(UNLOCK).CODE());
 
 	PUT(SCANKEY_NULL, attrib[Shm->Proc.Features.TurboActiv_Lock == 0],
-		width, 3, "%s%.*s[%.*s]", RSC(TURBO_ACTIVATION).CODE(),
-		width - (OutFunc == NULL ? 14:12)-RSZ(TURBO_ACTIVATION),hSpace,
+		width, 3, "%s%.*s[%7.*s]", RSC(TURBO_ACTIVATION).CODE(),
+		width - (OutFunc == NULL ? 15:13)-RSZ(TURBO_ACTIVATION),hSpace,
 			6, Shm->Proc.Features.TurboActiv_Lock == 1 ?
 				RSC(LOCK).CODE() : RSC(UNLOCK).CODE());
 
@@ -914,7 +924,7 @@ REASON_CODE SysInfoISA(Window *win, CELL_FUNC OutFunc)
 				|  Shm->Proc.Features.ExtInfo.EDX._3DNowEx)
 				+ (Shm->Proc.Features.ExtInfo.EDX._3DNow
 				<< Shm->Proc.Features.ExtInfo.EDX._3DNowEx)],
-		" 3DNow!/Ext [%c,%c]",
+		" 3DNow!/Ext [%c/%c]",
 		Shm->Proc.Features.ExtInfo.EDX._3DNow ? 'Y' : 'N',
 		Shm->Proc.Features.ExtInfo.EDX._3DNowEx ? 'Y' : 'N');
 
@@ -946,21 +956,21 @@ REASON_CODE SysInfoISA(Window *win, CELL_FUNC OutFunc)
 		Shm->Proc.Features.ExtFeature.EBX.BMI1 ? 'Y' : 'N',
 		Shm->Proc.Features.ExtFeature.EBX.BMI2 ? 'Y' : 'N');
 
-	PRT(ISA, attrib[0][Shm->Proc.Features.Std.EDX.CLFSH],
-		"        CLFSH [%c]",
-		Shm->Proc.Features.Std.EDX.CLFSH ? 'Y' : 'N');
+	PRT(ISA, attrib[0][Shm->Proc.Features.Std.EDX.CLFLUSH],
+		"      CLFLUSH [%c]",
+		Shm->Proc.Features.Std.EDX.CLFLUSH ? 'Y' : 'N');
 
 	PRT(ISA, attrib[3][Shm->Proc.Features.Std.EDX.CMOV],
 		"        CMOV [%c] ",
 		Shm->Proc.Features.Std.EDX.CMOV ? 'Y' : 'N');
 /* Row Mark */
-	PRT(ISA, attrib[0][Shm->Proc.Features.Std.EDX.CMPXCH8],
-		" CMPXCH8      [%c]",
-		Shm->Proc.Features.Std.EDX.CMPXCH8 ? 'Y' : 'N');
+	PRT(ISA, attrib[0][Shm->Proc.Features.Std.EDX.CMPXCHG8],
+		" CMPXCHG8B    [%c]",
+		Shm->Proc.Features.Std.EDX.CMPXCHG8 ? 'Y' : 'N');
 
-	PRT(ISA, attrib[0][Shm->Proc.Features.Std.ECX.CMPXCH16],
-		"     CMPXCH16 [%c]",
-		Shm->Proc.Features.Std.ECX.CMPXCH16 ? 'Y' : 'N');
+	PRT(ISA, attrib[0][Shm->Proc.Features.Std.ECX.CMPXCHG16],
+		"   CMPXCHG16B [%c]",
+		Shm->Proc.Features.Std.ECX.CMPXCHG16 ? 'Y' : 'N');
 
 	PRT(ISA, attrib[0][Shm->Proc.Features.Std.ECX.F16C],
 		"         F16C [%c]",
@@ -986,9 +996,13 @@ REASON_CODE SysInfoISA(Window *win, CELL_FUNC OutFunc)
 		Shm->Proc.Features.Std.EDX.MMX ? 'Y' : 'N',
 		Shm->Proc.Features.ExtInfo.EDX.MMX_Ext ? 'Y' : 'N');
 
-	PRT(ISA, attrib[3][Shm->Proc.Features.Std.ECX.MONITOR],
-		"     MONITOR [%c] ",
-		Shm->Proc.Features.Std.ECX.MONITOR ? 'Y' : 'N');
+	PRT(ISA, attrib[3][2 * (Shm->Proc.Features.Std.ECX.MONITOR
+			|  Shm->Proc.Features.ExtInfo.ECX.MWaitExt)
+			+ (Shm->Proc.Features.Std.ECX.MONITOR
+			<< Shm->Proc.Features.ExtInfo.ECX.MWaitExt)],
+		"  MONITOR/X[%c/%c] ",
+		Shm->Proc.Features.Std.ECX.MONITOR ? 'Y' : 'N',
+		Shm->Proc.Features.ExtInfo.ECX.MWaitExt ? 'Y' : 'N');
 /* Row Mark */
 	PRT(ISA, attrib[0][Shm->Proc.Features.Std.ECX.MOVBE],
 		" MOVBE        [%c]",
@@ -999,7 +1013,7 @@ REASON_CODE SysInfoISA(Window *win, CELL_FUNC OutFunc)
 		Shm->Proc.Features.ExtFeature.EBX.MPX ? 'Y' : 'N');
 
 	PRT(ISA, attrib[0][Shm->Proc.Features.Std.ECX.PCLMULDQ],
-		"     PCLMULDQ [%c]",
+		"    PCLMULQDQ [%c]",
 		Shm->Proc.Features.Std.ECX.PCLMULDQ ? 'Y' : 'N');
 
 	PRT(ISA, attrib[3][Shm->Proc.Features.Std.ECX.POPCNT],
@@ -1844,9 +1858,9 @@ void DutyCycle_Update(TGrid *grid, DATA_TYPE data)
 {
 	int bix = (Shm->Proc.Features.Std.EDX.ACPI == 1)
 	       && (Shm->Proc.Technology.ODCM == 1);
-	char item[9+1];
+	char item[10+1];
 
-	sprintf(item, "%c%6.2f%%%c",
+	snprintf(item, 10+1, "%c%6.2f%%%c",
 		bix ? '<' : '[',
 	(Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.DutyCycle.Extended ?
 		6.25f : 12.5f)
@@ -1859,7 +1873,7 @@ void DutyCycle_Update(TGrid *grid, DATA_TYPE data)
 
 void Hint_Update(TGrid *grid, DATA_TYPE data)
 {
-	char item[7+1];
+	char item[10+1];
 	sprintf(item, "%7u", (*data.puint));
 	memcpy(&grid->cell.item[grid->cell.length - 9], item, 7);
 }
@@ -1966,21 +1980,29 @@ REASON_CODE SysInfoPwrThermal(Window *win, CUINT width, CELL_FUNC OutFunc)
 		"%s%.*sPTM   [%7s]", RSC(POWER_THERMAL_PTM).CODE(),
 		width - 18 - RSZ(POWER_THERMAL_PTM), hSpace, powered(bix));
 
-	bix = Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM1
-	    | Shm->Proc.Features.AdvPower.EDX.TTP;
+    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL) {
+	bix = Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM1;
 	PUT(SCANKEY_NULL, attrib[bix], width, 2,
-		"%s%.*sTM1|TTP   [%7s]", RSC(POWER_THERMAL_TM1).CODE(),
-		width - 22 - RSZ(POWER_THERMAL_TM1), hSpace,
-		TM[  Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM1
-			| Shm->Proc.Features.AdvPower.EDX.TTP ]);
+		"%s%.*sTM1   [%7s]", RSC(POWER_THERMAL_TM1).CODE(),
+		width - 18 - RSZ(POWER_THERMAL_TM1), hSpace, TM[bix]);
 
-	bix = Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM2
-	    | Shm->Proc.Features.AdvPower.EDX.TM;
+	bix = Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM2;
 	PUT(SCANKEY_NULL, attrib[bix], width, 2,
-		"%s%.*sTM2|HTC   [%7s]", RSC(POWER_THERMAL_TM2).CODE(),
-		width - 22 - RSZ(POWER_THERMAL_TM2), hSpace,
-		TM[  Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM2
-			| Shm->Proc.Features.AdvPower.EDX.TM ]);
+		"%s%.*sTM2   [%7s]", RSC(POWER_THERMAL_TM2).CODE(),
+		width - 18 - RSZ(POWER_THERMAL_TM2), hSpace, TM[bix]);
+    }
+    else if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
+    {
+	bix = Shm->Proc.Features.AdvPower.EDX.TTP;
+	PUT(SCANKEY_NULL, attrib[bix], width, 2,
+		"%s%.*sTTP   [%7s]", RSC(POWER_THERMAL_TM1).CODE(),
+		width - 18 - RSZ(POWER_THERMAL_TM1), hSpace, TM[bix]);
+
+	bix = Shm->Proc.Features.AdvPower.EDX.TM;
+	PUT(SCANKEY_NULL, attrib[bix], width, 2,
+		"%s%.*sHTC   [%7s]", RSC(POWER_THERMAL_TM2).CODE(),
+		width - 18 - RSZ(POWER_THERMAL_TM2), hSpace, TM[bix]);
+    }
 
 	PUT(SCANKEY_NULL, attrib[0], width, 2,
 		(char*) RSC(POWER_THERMAL_UNITS).CODE(), NULL);
@@ -2009,7 +2031,7 @@ REASON_CODE SysInfoPwrThermal(Window *win, CUINT width, CELL_FUNC OutFunc)
 
 void KernelUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[18+3+1];
+	char item[20+3+1];
 	size_t len = sprintf(item, "%18lu KB", (*data.pulong));
 
 	memcpy(&grid->cell.item[grid->cell.length - len - 1], item, len);
@@ -2017,7 +2039,7 @@ void KernelUpdate(TGrid *grid, DATA_TYPE data)
 
 void IdleLimitUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[8];
+	char item[11+1];
 	size_t len = sprintf(item, "%6d", (*data.psint));
 
 	memcpy(&grid->cell.item[grid->cell.length - len - 2], item, len);
@@ -2027,7 +2049,7 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
 {
 	REASON_INIT(reason);
 	size_t	len = (1 + width) * 5;
-	char	*item[5], str[1 + CPUFREQ_NAME_LEN];
+	char	*item[5], str[CPUFREQ_NAME_LEN+4+1];
 	int	idx;
 	for (idx = 0; idx < 5; idx++) {
 		if ((item[idx] = malloc(len)) != NULL)
@@ -2105,8 +2127,9 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
     {
 	PUT(SCANKEY_NULL, RSC(KERNEL_FREQ_DRIVER).ATTR(), width, 0,
 		item[0], RSC(KERNEL_FREQ_DRIVER).CODE(),
-		width - 2 - RSZ(KERNEL_FREQ_DRIVER) - CPUFREQ_NAME_LEN, hSpace,
-		len, Shm->SysGate.OS.FreqDriver.Name);
+		width - (OutFunc == NULL ? 2 : 3)
+		- RSZ(KERNEL_FREQ_DRIVER) - CPUFREQ_NAME_LEN,
+		hSpace, len, Shm->SysGate.OS.FreqDriver.Name);
     }
 /* Row Mark */
     len = KMIN(strlen(Shm->SysGate.OS.FreqDriver.Governor), CPUFREQ_NAME_LEN);
@@ -2114,8 +2137,9 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
     {
 	PUT(SCANKEY_NULL, RSC(KERNEL_GOVERNOR).ATTR(), width, 0,
 		item[0], RSC(KERNEL_GOVERNOR).CODE(),
-		width - 2 - RSZ(KERNEL_GOVERNOR) - CPUFREQ_NAME_LEN, hSpace,
-		len, Shm->SysGate.OS.FreqDriver.Governor);
+		width - (OutFunc == NULL ? 2 : 3) - RSZ(KERNEL_GOVERNOR)
+		- CPUFREQ_NAME_LEN,
+		hSpace, len, Shm->SysGate.OS.FreqDriver.Governor);
     }
 /* Row Mark */
     len = KMIN(strlen(Shm->SysGate.OS.IdleDriver.Name), CPUIDLE_NAME_LEN);
@@ -2124,34 +2148,34 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
 	sprintf(item[0], "%%s%%.*s[%%%d.*s]", CPUIDLE_NAME_LEN);
 	PUT(SCANKEY_NULL, RSC(KERNEL_IDLE_DRIVER).ATTR(), width, 0,
 		item[0], RSC(KERNEL_IDLE_DRIVER).CODE(),
-		width - 2 - RSZ(KERNEL_IDLE_DRIVER) - CPUIDLE_NAME_LEN, hSpace,
-		len, Shm->SysGate.OS.IdleDriver.Name);
+		width - (OutFunc == NULL ? 2 : 3)
+		- RSZ(KERNEL_IDLE_DRIVER) - CPUIDLE_NAME_LEN,
+		hSpace, len, Shm->SysGate.OS.IdleDriver.Name);
     }
 /* Section Mark */
 	GridCall(PUT(Shm->Registration.Driver.cpuidle ? BOXKEY_LIMIT_IDLE_STATE
 							: SCANKEY_NULL,
 			RSC(KERNEL_LIMIT).ATTR(), width, 2,
 			"%s%.*s%c%6d%c", RSC(KERNEL_LIMIT).CODE(),
-			width - (OutFunc == NULL ? 12 : 11) - RSZ(KERNEL_LIMIT),
-			hSpace,
+			width - 11 - RSZ(KERNEL_LIMIT),hSpace,
 			Shm->Registration.Driver.cpuidle ? '<' : '[',
 			Shm->SysGate.OS.IdleDriver.stateLimit,
 			Shm->Registration.Driver.cpuidle ? '>' : ']'),
 		IdleLimitUpdate, &Shm->SysGate.OS.IdleDriver.stateLimit);
 
-	sprintf(item[0], "%s%.*s", RSC(KERNEL_STATE).CODE(),
-			10 - (int) RSZ(KERNEL_STATE), hSpace);
+	snprintf(item[0], 10+1, "%s%.*s" , RSC(KERNEL_STATE).CODE(),
+				10 - (int) RSZ(KERNEL_STATE), hSpace);
 
 	sprintf(item[1], "%.*s", 10, hSpace);
 
-	sprintf(item[2], "%s%.*s", RSC(KERNEL_POWER).CODE(),
-			10 - (int) RSZ(KERNEL_POWER), hSpace);
+	snprintf(item[2], 10+1, "%s%.*s" , RSC(KERNEL_POWER).CODE(),
+				10 - (int) RSZ(KERNEL_POWER), hSpace);
 
-	sprintf(item[3], "%s%.*s", RSC(KERNEL_LATENCY).CODE(),
-			10 - (int) RSZ(KERNEL_LATENCY), hSpace);
+	snprintf(item[3], 10+1, "%s%.*s" , RSC(KERNEL_LATENCY).CODE(),
+				10 - (int) RSZ(KERNEL_LATENCY), hSpace);
 
-	sprintf(item[4], "%s%.*s", RSC(KERNEL_RESIDENCY).CODE(),
-			10 - (int) RSZ(KERNEL_RESIDENCY), hSpace);
+	snprintf(item[4], 10+1, "%s%.*s" , RSC(KERNEL_RESIDENCY).CODE(),
+				10 - (int) RSZ(KERNEL_RESIDENCY), hSpace);
 
     for (idx = 0; idx < CPUIDLE_STATE_MAX; idx++) {
       if (idx < Shm->SysGate.OS.IdleDriver.stateCount)
@@ -2178,7 +2202,7 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
 		Shm->SysGate.OS.IdleDriver.State[idx].targetResidency);
 	strcat(item[4], str);
       } else {
-	strcat(item[0], "\x20n/a");
+	strcat(item[0], "\x20\x20\x20\x20");
 	strcat(item[1], "\x20\x20\x20\x20");
 	strcat(item[2], "\x20\x20\x20\x20");
 	strcat(item[3], "\x20\x20\x20\x20");
@@ -2213,46 +2237,49 @@ REASON_CODE SysInfoKernel(Window *win, CUINT width, CELL_FUNC OutFunc)
 	return(reason);
 }
 
+char *ScrambleSMBIOS(enum SMB_STRING idx, int mod, char thing)
+{
+	struct {
+		char		*pString;
+		unsigned short	secret;
+	} smb[SMB_STRING_COUNT] = {
+		{.pString = Shm->SMB.BIOS.Vendor,	.secret = 0},
+		{.pString = Shm->SMB.BIOS.Version,	.secret = 0},
+		{.pString = Shm->SMB.BIOS.Release,	.secret = 0},
+		{.pString = Shm->SMB.System.Vendor,	.secret = 0},
+		{.pString = Shm->SMB.Product.Name,	.secret = 0},
+		{.pString = Shm->SMB.Product.Version,	.secret = 0},
+		{.pString = Shm->SMB.Product.Serial,	.secret = 1},
+		{.pString = Shm->SMB.Product.SKU,	.secret = 0},
+		{.pString = Shm->SMB.Product.Family,	.secret = 0},
+		{.pString = Shm->SMB.Board.Name,	.secret = 0},
+		{.pString = Shm->SMB.Board.Version,	.secret = 0},
+		{.pString = Shm->SMB.Board.Serial,	.secret = 1}
+	};
+	if (smb[idx].secret & Setting.secret) {
+		static char outStr[MAX_UTS_LEN];
+		size_t len = strlen(smb[idx].pString);
+		int i;
+		for (i = 0; i < len; i++) {
+			outStr[i] = (i % mod) ? thing : smb[idx].pString[i];
+		}
+		outStr[i] = '\0';
+		return(outStr);
+	} else {
+		return(smb[idx].pString);
+	}
+}
+
 REASON_CODE SysInfoSMBIOS(Window *win, CUINT width, CELL_FUNC OutFunc)
 {
+	enum SMB_STRING idx;
+
 	REASON_INIT(reason);
 
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 0,
-		"%s", Shm->SMB.BIOS.Vendor);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.BIOS.Version);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.BIOS.Release);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 0,
-		"%s", Shm->SMB.System.Vendor);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 0,
-		"%s", Shm->SMB.Product.Name);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Product.Version);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Product.Serial);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Product.SKU);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Product.Family);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 0,
-		"%s", Shm->SMB.Board.Name);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Board.Version);
-
-	PUT(SCANKEY_NULL, RSC(SMBIOS_TITLE).ATTR(), width, 2,
-		"%s", Shm->SMB.Board.Serial);
-
+	for (idx = 0; idx < SMB_STRING_COUNT; idx ++) {
+		PUT(	SMBIOS_STRING_INDEX|idx, RSC(SMBIOS_ITEM).ATTR(),
+			width, 0, "[%2d] %s", idx, ScrambleSMBIOS(idx, 4, '-'));
+	}
 	return(reason);
 }
 
@@ -2292,8 +2319,104 @@ void Package(void)
     }
 }
 
+void Core_Celsius(struct FLIP_FLOP *CFlop, unsigned int cpu)
+{
+	printf( "%03u %7.2f (%5.2f)"				\
+		" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
+		"  %-3u/%3u:%-3u/%3u\n",
+		cpu,
+		CFlop->Relative.Freq,
+		CFlop->Relative.Ratio,
+		100.f * CFlop->State.Turbo,
+		100.f * CFlop->State.C0,
+		100.f * CFlop->State.C1,
+		100.f * CFlop->State.C3,
+		100.f * CFlop->State.C6,
+		100.f * CFlop->State.C7,
+		Shm->Cpu[cpu].PowerThermal.Limit[0],
+		CFlop->Thermal.Temp,
+		CFlop->Thermal.Sensor,
+		Shm->Cpu[cpu].PowerThermal.Limit[1] );
+}
+
+void Core_Fahrenheit(struct FLIP_FLOP *CFlop, unsigned int cpu)
+{
+	printf( "%03u %7.2f (%5.2f)"				\
+		" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
+		"  %-3u/%3u:%-3u/%3u\n",
+		cpu,
+		CFlop->Relative.Freq,
+		CFlop->Relative.Ratio,
+		100.f * CFlop->State.Turbo,
+		100.f * CFlop->State.C0,
+		100.f * CFlop->State.C1,
+		100.f * CFlop->State.C3,
+		100.f * CFlop->State.C6,
+		100.f * CFlop->State.C7,
+		Cels2Fahr(Shm->Cpu[cpu].PowerThermal.Limit[0]),
+		Cels2Fahr(CFlop->Thermal.Temp),
+		Cels2Fahr(CFlop->Thermal.Sensor),
+		Cels2Fahr(Shm->Cpu[cpu].PowerThermal.Limit[1]) );
+}
+
+void Pkg_Celsius(struct PKG_FLIP_FLOP *PFlop)
+{
+printf( "\n"							\
+	"%.*s" "Averages:"					\
+	"%.*s" "Turbo  C0(%%)  C1(%%)  C3(%%)  C6(%%)  C7(%%)"	\
+	"%.*s" "TjMax:" "%.*s" "Pkg:\n"				\
+	"%.*s" "%6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
+	"%.*s" "%3u C" "%.*s" "%3u C\n\n",
+	4, hSpace,
+	8, hSpace,
+	4, hSpace,
+	4, hSpace,
+	20, hSpace,
+	100.f * Shm->Proc.Avg.Turbo,
+	100.f * Shm->Proc.Avg.C0,
+	100.f * Shm->Proc.Avg.C1,
+	100.f * Shm->Proc.Avg.C3,
+	100.f * Shm->Proc.Avg.C6,
+	100.f * Shm->Proc.Avg.C7,
+	5, hSpace,
+	Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.Param.Offset[0],
+	3, hSpace,
+	PFlop->Thermal.Temp );
+}
+
+void Pkg_Fahrenheit(struct PKG_FLIP_FLOP *PFlop)
+{
+printf( "\n"							\
+	"%.*s" "Averages:"					\
+	"%.*s" "Turbo  C0(%%)  C1(%%)  C3(%%)  C6(%%)  C7(%%)"	\
+	"%.*s" "TjMax:" "%.*s" "Pkg:\n"				\
+	"%.*s" "%6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
+	"%.*s" "%3u C" "%.*s" "%3u C\n\n",
+	4, hSpace,
+	8, hSpace,
+	4, hSpace,
+	4, hSpace,
+	20, hSpace,
+	100.f * Shm->Proc.Avg.Turbo,
+	100.f * Shm->Proc.Avg.C0,
+	100.f * Shm->Proc.Avg.C1,
+	100.f * Shm->Proc.Avg.C3,
+	100.f * Shm->Proc.Avg.C6,
+	100.f * Shm->Proc.Avg.C7,
+	5, hSpace,
+      Cels2Fahr(Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.Param.Offset[0]),
+	3, hSpace,
+	Cels2Fahr(PFlop->Thermal.Temp) );
+}
+
 void Counters(void)
 {
+    void (*Core_Temp)(struct FLIP_FLOP *, unsigned int) =	\
+	Setting.fahrCels ? Core_Fahrenheit : Core_Celsius;
+
+    void (*Pkg_Temp)(struct PKG_FLIP_FLOP *) =			\
+	Setting.fahrCels ? Pkg_Fahrenheit : Pkg_Celsius;
+
     unsigned int cpu = 0;
     while (!BITVAL(Shutdown, 0)) {
 	while (!BITVAL(Shm->Proc.Sync, 0) && !BITVAL(Shutdown, 0))
@@ -2316,48 +2439,14 @@ void Counters(void)
 			&Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
 
 	    if (!BITVAL(Shm->Cpu[cpu].OffLine, OS))
-		printf( "#%02u %7.2f (%5.2f)"				\
-			" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
-			"  %-3u/%3u:%-3u/%3u\n",
-			cpu,
-			CFlop->Relative.Freq,
-			CFlop->Relative.Ratio,
-			100.f * CFlop->State.Turbo,
-			100.f * CFlop->State.C0,
-			100.f * CFlop->State.C1,
-			100.f * CFlop->State.C3,
-			100.f * CFlop->State.C6,
-			100.f * CFlop->State.C7,
-			Shm->Cpu[cpu].PowerThermal.Limit[0],
-			CFlop->Thermal.Temp,
-			CFlop->Thermal.Sensor,
-			Shm->Cpu[cpu].PowerThermal.Limit[1]);
+		Core_Temp(CFlop, cpu);
 	    else
-		printf("#%02u        OFF\n", cpu);
+		printf("%03u        OFF\n", cpu);
 	  }
 	}
 	struct PKG_FLIP_FLOP *PFlop = &Shm->Proc.FlipFlop[!Shm->Proc.Toggle];
-	printf( "\n"							\
-		"%.*s" "Averages:"					\
-		"%.*s" "Turbo  C0(%%)  C1(%%)  C3(%%)  C6(%%)  C7(%%)"	\
-		"%.*s" "TjMax:" "%.*s" "Pkg:\n"				\
-		"%.*s" "%6.2f %6.2f %6.2f %6.2f %6.2f %6.2f"		\
-		"%.*s" "%3u C" "%.*s" "%3u C\n\n",
-		4, hSpace,
-		8, hSpace,
-		4, hSpace,
-		4, hSpace,
-		20, hSpace,
-		100.f * Shm->Proc.Avg.Turbo,
-		100.f * Shm->Proc.Avg.C0,
-		100.f * Shm->Proc.Avg.C1,
-		100.f * Shm->Proc.Avg.C3,
-		100.f * Shm->Proc.Avg.C6,
-		100.f * Shm->Proc.Avg.C7,
-		5, hSpace,
-		Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.Param.Offset[0],
-		3, hSpace,
-		PFlop->Thermal.Temp);
+
+	Pkg_Temp(PFlop);
     }
 }
 
@@ -2383,13 +2472,13 @@ void Voltage(void)
 			&Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
 
 	    if (!BITVAL(Shm->Cpu[cpu].OffLine, OS))
-		printf("#%02u %7.2f %5d  %5.4f\n",
+		printf("%03u %7.2f %5d  %5.4f\n",
 			cpu,
 			CFlop->Relative.Freq,
 			CFlop->Voltage.VID,
 			CFlop->Voltage.Vcore);
 	    else
-		printf("#%02u        OFF\n", cpu);
+		printf("%03u        OFF\n", cpu);
 	  }
 
 	printf("\n" "%.*sPackage%.*sCores%.*sUncore%.*sMemory",
@@ -2430,13 +2519,13 @@ void Instructions(void)
 			&Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
 
 		if (!BITVAL(Shm->Cpu[cpu].OffLine, OS))
-			printf("#%02u %12.6f/s %12.6f/c %12.6f/i\n",
+			printf("%03u %12.6f/s %12.6f/c %12.6f/i\n",
 				cpu,
 				CFlop->State.IPS,
 				CFlop->State.IPC,
 				CFlop->State.CPI);
 		else
-			printf("#%02u\n", cpu);
+			printf("%03u\n", cpu);
 	    }
 		printf("\n");
     }
@@ -2459,43 +2548,59 @@ void Topology(Window *win, CELL_FUNC OutFunc)
 	PRT(MAP, attrib[2], " (i)nclusive ");
 	PRT(MAP, attrib[2], "             ");
 	PRT(MAP, attrib[2], " #   ID   ID ");
+    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD) {
+	PRT(MAP, attrib[2], " CCX ID    ID");
+    } else {
 	PRT(MAP, attrib[2], "   ID     ID ");
+    }
 	PRT(MAP, attrib[2], " L1-Inst Way ");
 	PRT(MAP, attrib[2], " L1-Data Way ");
 	PRT(MAP, attrib[2], "     L2  Way ");
 	PRT(MAP, attrib[2], "     L3  Way ");
 
-    for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++) {
+    for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++)
+      if (!BITVAL(Shm->Cpu[cpu].OffLine, OS)) {
 	if (Shm->Cpu[cpu].Topology.MP.BSP)
-		PRT(MAP,attrib[BITVAL(Shm->Cpu[cpu].OffLine,OS)],
-			"%02u: BSP%6d",
+		PRT(MAP, attrib[0], "%03u:BSP%6d",
 			cpu,
 			Shm->Cpu[cpu].Topology.ApicID);
 	else
-		PRT(MAP,attrib[BITVAL(Shm->Cpu[cpu].OffLine,OS)],
-			"%02u:%4d%6d",
+		PRT(MAP, attrib[0], "%03u:%3d%6d",
 			cpu,
 			Shm->Cpu[cpu].Topology.PackageID,
 			Shm->Cpu[cpu].Topology.ApicID);
 
-	PRT(MAP, attrib[BITVAL(Shm->Cpu[cpu].OffLine, OS)],
-		"%6d %6d",
-		Shm->Cpu[cpu].Topology.CoreID,
-		Shm->Cpu[cpu].Topology.ThreadID);
-
+	if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD) {
+		PRT(MAP, attrib[0], "%3d%4d%6d",
+			Shm->Cpu[cpu].Topology.MP.CCX,
+			Shm->Cpu[cpu].Topology.CoreID,
+			Shm->Cpu[cpu].Topology.ThreadID);
+	} else {
+		PRT(MAP, attrib[0], "%6d %6d",
+			Shm->Cpu[cpu].Topology.CoreID,
+			Shm->Cpu[cpu].Topology.ThreadID);
+	}
 	for (level = 0; level < CACHE_MAX_LEVEL; level++) {
-	    if (!BITVAL(Shm->Cpu[cpu].OffLine, OS)) {
 		PRT(MAP, attrib[0], "%8u%3u%c%c",
-		Shm->Cpu[cpu].Topology.Cache[level].Size,
-		Shm->Cpu[cpu].Topology.Cache[level].Way,
-		Shm->Cpu[cpu].Topology.Cache[level].Feature.WriteBack ?
-			'w' : 0x20,
-		Shm->Cpu[cpu].Topology.Cache[level].Feature.Inclusive ?
-			'i' : 0x20);
-	    } else
+			Shm->Cpu[cpu].Topology.Cache[level].Size,
+			Shm->Cpu[cpu].Topology.Cache[level].Way,
+			Shm->Cpu[cpu].Topology.Cache[level].Feature.WriteBack ?
+				'w' : 0x20,
+			Shm->Cpu[cpu].Topology.Cache[level].Feature.Inclusive ?
+				'i' : 0x20);
+	}
+      } else {
+		PRT(MAP, attrib[1], "%03u:  -     -", cpu);
+
+	if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD) {
+		PRT(MAP, attrib[1], "  -   -     -");
+	} else {
+		PRT(MAP, attrib[1], "     -      -");
+	}
+	for (level = 0; level < CACHE_MAX_LEVEL; level++) {
 		PRT(MAP, attrib[1], "       -  -  ");
 	}
-    }
+      }
 }
 
 void iSplit(unsigned int sInt, char hInt[]) {
@@ -2836,10 +2941,12 @@ struct {
 		height	:  3-2 ,	/* Valid height 		*/
 		width	:  4-3 ,	/* Valid width			*/
 		daemon	:  5-4 ,	/* Draw dynamic 		*/
-		taskVal :  6-5 ,	/* Display task's value		*/
+		taskVal :  6-5 ,	/* Display task's value 	*/
 		avgOrPC :  7-6 ,	/* C-states average || % pkg states */
 		clkOrLd :  8-7 ,	/* Relative freq. || % load	*/
-		fahrCels:  9-8 ,	/* 0:Celsius || 1:Fahrenheit	*/
+	    #if defined(UBENCH) && UBENCH == 1
+		uBench	:  9-8 ,	/* Display UI micro-benchmark	*/
+	    #endif
 		_padding: 32-9 ;
 	} Flag;
 	enum VIEW	View;
@@ -2852,6 +2959,10 @@ struct {
 	} Area;
 	unsigned int	iClock,
 			cpuScroll;
+	struct {
+	unsigned int	Memory;
+	} Unit;
+	enum SMB_STRING SmbIndex;
 } draw = {
 	.Flag = {
 		.layout = 0,
@@ -2862,14 +2973,19 @@ struct {
 		.taskVal= 0,
 		.avgOrPC= 0,
 		.clkOrLd= 0,
-		.fahrCels=0
+	    #if defined(UBENCH) && UBENCH == 1
+		.uBench = 0,
+	    #endif
+		._padding=0
 	},
 	.View		= V_FREQ,
 	.Disposal	= D_MAINVIEW,
 	.Size		= {.width = 0, .height = 0},
 	.Area		= {.MinHeight = 0, .MaxRows = 0, .LoadWidth = 0},
 	.iClock 	= 0,
-	.cpuScroll	= 0
+	.cpuScroll	= 0,
+	.Unit		= {.Memory = 0},
+	.SmbIndex	= SMB_BOARD_NAME
 };
 
 enum THERM_PWR_EVENTS processorEvents = EVENT_THERM_NONE;
@@ -2954,7 +3070,7 @@ int ByteReDim(unsigned long ival, int constraint, unsigned long *oval)
 #define frtostr(r, d, pStr)						\
 ({									\
 	int p = d - ((int) log10(fabs(r))) - 2;				\
-	sprintf(pStr, "%*.*f", d, p, r);				\
+	snprintf(pStr, d+1, "%*.*f", d, p, r);				\
 	pStr;								\
 })
 
@@ -3018,72 +3134,126 @@ void ForEachCellPrint_Menu(Window *win, void *plist)
 			win->hook.color[0].title);
 }
 
-Window *CreateMenu(unsigned long long id)
+Window *CreateMenu(unsigned long long id, CUINT matrixSelectCol)
 {
 	Window *wMenu = CreateWindow(wLayer, id, 3, 12, 3, 0);
-    if (wMenu != NULL) {
-	ATTRIBUTE voidAttr = {.value = 0},
-		sameAttr = {.fg = BLACK, .bg = WHITE, .bf = 0},
-		*fkeyAttr = RSC(CREATE_MENU_FN_KEY).ATTR(),
-		*skeyAttr = RSC(CREATE_MENU_SHORTKEY).ATTR(),
-		*gateAttr = BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1) ?
-				RSC(CREATE_MENU_SHORTKEY).ATTR()
-				: RSC(CREATE_MENU_STOP).ATTR(),
-		*ctrlAttr = (Shm->Uncore.CtrlCount > 0) ?
-				RSC(CREATE_MENU_SHORTKEY).ATTR()
-				: RSC(CREATE_MENU_STOP).ATTR();
+    if (wMenu != NULL)
+    {
+/* Top Menu */
+	StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_MENU).CODE(),
+					RSC(MENU_ITEM_MENU).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_MENU).CODE()	, sameAttr);
-  StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_VIEW).CODE()	, sameAttr);
-  StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_WINDOW).CODE()	, sameAttr);
+	StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_VIEW).CODE(),
+					RSC(MENU_ITEM_VIEW).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_s, RSC(MENU_ITEM_SETTINGS).CODE()	, skeyAttr);
-  StoreTCell(wMenu, SCANKEY_d, RSC(MENU_ITEM_DASHBOARD).CODE()	, skeyAttr);
-  StoreTCell(wMenu, SCANKEY_p, RSC(MENU_ITEM_PROCESSOR).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_NULL, RSC(MENU_ITEM_WINDOW).CODE(),
+					RSC(MENU_ITEM_WINDOW).ATTR());
+/* Row  1 */
+	StoreTCell(wMenu, SCANKEY_F1,	RSC(MENU_ITEM_KEYS).CODE(),
+					RSC(CREATE_MENU_FN_KEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_SHIFT_b,RSC(MENU_ITEM_SMBIOS).CODE(), skeyAttr);
-  StoreTCell(wMenu, SCANKEY_f, RSC(MENU_ITEM_FREQUENCY).CODE()	, skeyAttr);
-  StoreTCell(wMenu, SCANKEY_m, RSC(MENU_ITEM_TOPOLOGY).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_d,	RSC(MENU_ITEM_DASHBOARD).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_k,	RSC(MENU_ITEM_KERNEL).CODE()	, gateAttr);
-  StoreTCell(wMenu, SCANKEY_i, RSC(MENU_ITEM_INST_CYCLES).CODE(), skeyAttr);
-  StoreTCell(wMenu, SCANKEY_e,	RSC(MENU_ITEM_FEATURES).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_p,	RSC(MENU_ITEM_PROCESSOR).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  2 */
+	StoreTCell(wMenu, SCANKEY_SHIFT_l, RSC(MENU_ITEM_LANG).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_HASH,RSC(MENU_ITEM_HOTPLUG).CODE()	,skeyAttr);
-  StoreTCell(wMenu, SCANKEY_c, RSC(MENU_ITEM_CORE_CYCLES).CODE(), skeyAttr);
-  StoreTCell(wMenu, SCANKEY_SHIFT_i,RSC(MENU_ITEM_ISA_EXT).CODE(), skeyAttr);
+	StoreTCell(wMenu, SCANKEY_f,	RSC(MENU_ITEM_FREQUENCY).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_F3, RSC(MENU_ITEM_TOOLS).CODE()	, fkeyAttr);
-  StoreTCell(wMenu, SCANKEY_l, RSC(MENU_ITEM_IDLE_STATES).CODE(), skeyAttr);
-  StoreTCell(wMenu, SCANKEY_t,	RSC(MENU_ITEM_TECH).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_m,	RSC(MENU_ITEM_TOPOLOGY).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  3 */
+	StoreTCell(wMenu, SCANKEY_s,	RSC(MENU_ITEM_SETTINGS).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_a,	RSC(MENU_ITEM_ABOUT).CODE()	, skeyAttr);
-  StoreTCell(wMenu, SCANKEY_g,	RSC(MENU_ITEM_PKG_CYCLES).CODE(), skeyAttr);
-  StoreTCell(wMenu, SCANKEY_o,	RSC(MENU_ITEM_PERF_MON).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_i,	RSC(MENU_ITEM_INST_CYCLES).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_h,	RSC(MENU_ITEM_HELP).CODE()	, skeyAttr);
-  StoreTCell(wMenu, SCANKEY_x,	RSC(MENU_ITEM_TASKS_MON).CODE() , gateAttr);
-  StoreTCell(wMenu, SCANKEY_w,	RSC(MENU_ITEM_POW_THERM).CODE() , skeyAttr);
+	StoreTCell(wMenu, SCANKEY_e,	RSC(MENU_ITEM_FEATURES).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  4 */
+	StoreTCell(wMenu, SCANKEY_SHIFT_b, RSC(MENU_ITEM_SMBIOS).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_F1, RSC(MENU_ITEM_KEYS).CODE()	, fkeyAttr);
-  StoreTCell(wMenu, SCANKEY_q,	RSC(MENU_ITEM_SYS_INTER).CODE() , skeyAttr);
-  StoreTCell(wMenu, SCANKEY_u,	RSC(MENU_ITEM_CPUID).CODE()	, skeyAttr);
+	StoreTCell(wMenu, SCANKEY_c,	RSC(MENU_ITEM_CORE_CYCLES).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_SHIFT_l, RSC(MENU_ITEM_LANG).CODE() , skeyAttr);
-  StoreTCell(wMenu, SCANKEY_SHIFT_v,RSC(MENU_ITEM_POW_VOLT).CODE(),skeyAttr);
-  StoreTCell(wMenu, SCANKEY_SHIFT_r,RSC(MENU_ITEM_SYS_REGS).CODE(),skeyAttr);
+	StoreTCell(wMenu, SCANKEY_SHIFT_i, RSC(MENU_ITEM_ISA_EXT).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  5 */
+	StoreTCell(wMenu, SCANKEY_k,	RSC(MENU_ITEM_KERNEL).CODE(),
+			BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1) ?
+					RSC(CREATE_MENU_SHORTKEY).ATTR()
+					: RSC(CREATE_MENU_DISABLE).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_F4, RSC(MENU_ITEM_QUIT).CODE()	, fkeyAttr);
-  StoreTCell(wMenu, SCANKEY_SHIFT_t,RSC(MENU_ITEM_SLICE_CTRS).CODE(),skeyAttr);
-  StoreTCell(wMenu, SCANKEY_SHIFT_m,RSC(MENU_ITEM_MEM_CTRL).CODE(),ctrlAttr);
+	StoreTCell(wMenu, SCANKEY_l,	RSC(MENU_ITEM_IDLE_STATES).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
-  StoreTCell(wMenu, SCANKEY_VOID,	""			, voidAttr);
-  StoreTCell(wMenu, SCANKEY_VOID,	""			, voidAttr);
-  StoreTCell(wMenu, SCANKEY_VOID,	""			, voidAttr);
+	StoreTCell(wMenu, SCANKEY_t,	RSC(MENU_ITEM_TECH).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  6 */
+	StoreTCell(wMenu, SCANKEY_HASH, RSC(MENU_ITEM_HOTPLUG).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
 
+	StoreTCell(wMenu, SCANKEY_g,	RSC(MENU_ITEM_PKG_CYCLES).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_o,	RSC(MENU_ITEM_PERF_MON).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  7 */
+	StoreTCell(wMenu, SCANKEY_SHIFT_o, RSC(MENU_ITEM_TOOLS).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_x,	RSC(MENU_ITEM_TASKS_MON).CODE(),
+			BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1) ?
+					RSC(CREATE_MENU_SHORTKEY).ATTR()
+					: RSC(CREATE_MENU_DISABLE).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_w,	RSC(MENU_ITEM_POW_THERM).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  8 */
+	StoreTCell(wMenu, SCANKEY_a,	RSC(MENU_ITEM_ABOUT).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_q,	RSC(MENU_ITEM_SYS_INTER).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_u,	RSC(MENU_ITEM_CPUID).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row  9 */
+	StoreTCell(wMenu, SCANKEY_h,	RSC(MENU_ITEM_HELP).CODE(),
+					RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_SHIFT_v, RSC(MENU_ITEM_POW_VOLT).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_SHIFT_r, RSC(MENU_ITEM_SYS_REGS).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
+/* Row 10 */
+	StoreTCell(wMenu, SCANKEY_CTRL_x, RSC(MENU_ITEM_QUIT).CODE(),
+					  RSC(CREATE_MENU_CTRL_KEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_SHIFT_t, RSC(MENU_ITEM_SLICE_CTRS).CODE(),
+					   RSC(CREATE_MENU_SHORTKEY).ATTR());
+
+	StoreTCell(wMenu, SCANKEY_SHIFT_m, RSC(MENU_ITEM_MEM_CTRL).CODE(),
+				Shm->Uncore.CtrlCount > 0 ?
+					RSC(CREATE_MENU_SHORTKEY).ATTR()
+					: RSC(CREATE_MENU_DISABLE).ATTR());
+/* Row 11 */
+	StoreTCell(wMenu, SCANKEY_VOID, "", vColor);
+	StoreTCell(wMenu, SCANKEY_VOID, "", vColor);
+	StoreTCell(wMenu, SCANKEY_VOID, "", vColor);
+/* Bottom Menu */
 	StoreWindow(wMenu, .color[0].select,	MakeAttr(BLACK, 0, WHITE, 0));
 	StoreWindow(wMenu, .color[0].title,	MakeAttr(BLACK, 0, WHITE, 0));
 	StoreWindow(wMenu, .color[1].title,	MakeAttr(BLACK, 0, WHITE, 1));
+
+	wMenu->matrix.select.col = matrixSelectCol;
 
 	StoreWindow(wMenu,	.Print,		ForEachCellPrint_Menu);
 	StoreWindow(wMenu,	.key.Enter,	MotionEnter_Cell);
@@ -3099,28 +3269,28 @@ Window *CreateMenu(unsigned long long id)
 
 void IntervalUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[4+1];
+	char item[10+1];
 	sprintf(item, "%4u", Shm->Sleep.Interval);
 	memcpy(&grid->cell.item[grid->cell.length - 6], item, 4);
 }
 
 void SysTickUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[4+1];
+	char item[10+1];
 	sprintf(item, "%4u", Shm->Sleep.Interval * Shm->SysGate.tickReset);
 	memcpy(&grid->cell.item[grid->cell.length - 6], item, 4);
 }
 
 void SvrWaitUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[4+1];
+	char item[20+1];
 	sprintf(item, "%4ld", (*data.pslong) / 1000000L);
 	memcpy(&grid->cell.item[grid->cell.length - 6], item, 4);
 }
 
 void RecorderUpdate(TGrid *grid, DATA_TYPE data)
 {
-	char item[4+1];
+	char item[11+1];
 	int duration = RECORDER_SECONDS((*data.psint), Shm->Sleep.Interval);
 	if (duration <= 9999) {
 		sprintf(item, "%4d", duration);
@@ -3431,6 +3601,8 @@ Window *CreateAdvHelp(unsigned long long id)
 	{0, RSC(ADV_HELP_ITEM_8).CODE(),	{SCANKEY_NULL}	},
 	{1, RSC(ADV_HELP_ITEM_9).CODE(),	{SCANKEY_DOT}	},
 	{1, RSC(ADV_HELP_ITEM_FAHR_CELS).CODE(),{SCANKEY_SHIFT_f}},
+	{1, RSC(ADV_HELP_ITEM_PROC_EVENT).CODE(),{SCANKEY_SHIFT_h}},
+	{1, RSC(ADV_HELP_ITEM_SECRET).CODE(),	{SCANKEY_SHIFT_y}},
 	{1, RSC(ADV_HELP_ITEM_10).CODE(),	{SCANKEY_OPEN_BRACE}},
 	{1, RSC(ADV_HELP_ITEM_11).CODE(),	{SCANKEY_CLOSE_BRACE}},
 	{1, RSC(ADV_HELP_ITEM_12).CODE(),	{SCANKEY_F10}	},
@@ -3640,8 +3812,8 @@ Window *CreateSysInfo(unsigned long long id)
 		{
 		if (TOP_HEADER_ROW + 2 + matrixSize.hth >= draw.Size.height)
 			winOrigin.row = TOP_HEADER_ROW + 1;
-		winOrigin.col = 6;
-		winWidth = 66;
+		winOrigin.col = 4;
+		winWidth = MAX_UTS_LEN + 4 + 1;
 		SysInfoFunc = SysInfoSMBIOS;
 		title = RSC(SMBIOS_TITLE).CODE();
 		}
@@ -3680,6 +3852,9 @@ Window *CreateSysInfo(unsigned long long id)
 						wSysInfo->hook.color[1].border);
 			StoreWindow(wSysInfo,	.key.Enter, MotionEnter_Cell);
 			break;
+		case SCANKEY_SHIFT_b:
+			wSysInfo->matrix.select.row = draw.SmbIndex;
+			/* fallthrough */
 		default:
 			StoreWindow(wSysInfo,	.key.Enter, MotionEnter_Cell);
 			break;
@@ -3713,7 +3888,7 @@ Window *CreateTopology(unsigned long long id)
 {
 	Window *wTopology = CreateWindow(wLayer, id,
 					6, CUMIN(2 + Shm->Proc.CPU.Count,
-					  (draw.Size.height-TOP_HEADER_ROW-5)),
+					(draw.Size.height - TOP_HEADER_ROW - 5)),
 					1, TOP_HEADER_ROW + 3);
 		wTopology->matrix.select.row = 2;
 
@@ -3768,9 +3943,9 @@ Window *CreateISA(unsigned long long id)
 Window *CreateSysRegs(unsigned long long id)
 {
 	Window *wSR = CreateWindow(wLayer, id,
-			17,CUMIN((2 * (1 + Shm->Proc.CPU.Count)),
-				(draw.Size.height - TOP_HEADER_ROW - 3)),
-			6, TOP_HEADER_ROW + 2);
+					17,CUMIN((2 * (1 + Shm->Proc.CPU.Count)),
+					(draw.Size.height - TOP_HEADER_ROW - 3)),
+					6, TOP_HEADER_ROW + 2);
 
 	if (wSR != NULL) {
 		SystemRegisters(wSR, AddCell);
@@ -3928,7 +4103,7 @@ Window *CreateTracking(unsigned long long id)
 			else
 				qi = si + 2;
 
-			sprintf(item,
+			snprintf(item, MAX_WIDTH-1,
 				"%.*s" "%-16s" "%.*s" "(%5d)",
 				qi,
 				hSpace,
@@ -3978,14 +4153,14 @@ Window *CreateHotPlugCPU(unsigned long long id)
 	unsigned int cpu;
 	for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++) {
 	    if (BITVAL(Shm->Cpu[cpu].OffLine, OS)) {
-		sprintf((char*) item, " %02u   Off   ", cpu);
+		sprintf((char*) item, " %03u  Off   ", cpu);
 		StoreTCell(wCPU, SCANKEY_NULL, item, MakeAttr(BLUE,0,BLACK,1));
 
 		StoreTCell(wCPU, CPU_ONLINE | cpu ,
 					RSC(CREATE_HOTPLUG_CPU_ENABLE).CODE(),
 					RSC(CREATE_HOTPLUG_CPU_ENABLE).ATTR());
 	    } else {
-		sprintf((char*) item, " %02u    On   ", cpu);
+		sprintf((char*) item, " %03u   On   ", cpu);
 		StoreTCell(wCPU, SCANKEY_NULL, item, MakeAttr(WHITE,0,BLACK,0));
 
 		StoreTCell(wCPU, CPU_OFFLINE | cpu,
@@ -4021,8 +4196,8 @@ void UpdateRatioClock(TGrid *grid, DATA_TYPE data)
 	struct FLIP_FLOP *CFlop = &Shm->Cpu[Shm->Proc.Service.Core] \
 				.FlipFlop[!Shm->Cpu[Shm->Proc.Service.Core] \
 					.Toggle];
-	char item[8];
-	sprintf(item, "%7.2f",
+	char item[10+1];
+	snprintf(item, 10+1, "%7.2f",
 		data.uint[0] > MAXCLOCK_TO_RATIO(CFlop->Clock.Hz) ?
 			NAN : (double) (data.uint[0] * CFlop->Clock.Hz)
 					/ 1000000.0);
@@ -4196,7 +4371,7 @@ Window *CreateSelectCPU(unsigned long long id)
 	unsigned int cpu;
 	for (cpu = 0; cpu < Shm->Proc.CPU.Count; cpu++)
 	{
-		sprintf((char*) item, 	"   %02u  %4d%6d%6d   ",
+		sprintf((char*) item, 	"  %03u  %4d%6d%6d   ",
 					cpu,
 					Shm->Cpu[cpu].Topology.PackageID,
 					Shm->Cpu[cpu].Topology.CoreID,
@@ -4232,7 +4407,7 @@ Window *CreateSelectIdle(unsigned long long id)
 			TOP_HEADER_ROW + 2);
     if (wIdle != NULL)
     {
-	ASCII item[24+1];
+	ASCII item[33+1];
 	int idx;
 
 	StoreTCell(wIdle, BOXKEY_LIMIT_IDLE_ST00,
@@ -4289,7 +4464,7 @@ Window *CreateRecorder(unsigned long long id)
 					TOP_HEADER_ROW + 4 : 1);
     if (wRec != NULL)
     {
-	char item[24+1];
+	char item[39+1];
 	unsigned int idx = 1;
 	do {
 		unsigned long long key = OPS_RECORDER | (idx << 4);
@@ -4531,24 +4706,26 @@ int Shortcut(SCANKEY *scan)
 	if (!IsDead(&winList))
 		return(-1);
 	else if (draw.Disposal == D_MAINVIEW) {
-		CUINT offset = Shm->Proc.CPU.Count / 4;
-		if((draw.cpuScroll + offset) < ( Shm->Proc.CPU.Count
-						- draw.Area.MaxRows) )
-		{
-			draw.cpuScroll += offset;
-			draw.Flag.layout = 1;
-		}
+	    if ( (draw.cpuScroll + draw.Area.MaxRows) < ( Shm->Proc.CPU.Count
+							- draw.Area.MaxRows ) )
+	    {
+		draw.cpuScroll += draw.Area.MaxRows;
+	    } else {
+		draw.cpuScroll = Shm->Proc.CPU.Count - draw.Area.MaxRows;
+	    }
+		draw.Flag.layout = 1;
 	}
     break;
     case SCANKEY_PGUP:
 	if (!IsDead(&winList))
 		return(-1);
 	else if (draw.Disposal == D_MAINVIEW) {
-		CUINT offset = Shm->Proc.CPU.Count / 4;
-		if (draw.cpuScroll >= offset) {
-			draw.cpuScroll -= offset;
-			draw.Flag.layout = 1;
-		}
+	    if (draw.cpuScroll >= draw.Area.MaxRows) {
+		draw.cpuScroll -= draw.Area.MaxRows;
+	    } else {
+		draw.cpuScroll = 0;
+	    }
+		draw.Flag.layout = 1;
 	}
     break;
     case SCANKEY_OPEN_BRACE:
@@ -4572,13 +4749,37 @@ int Shortcut(SCANKEY *scan)
     {
 	Window *win = SearchWinListById(SCANKEY_F2, &winList);
 	if (win == NULL)
-		AppendWindow(CreateMenu(SCANKEY_F2), &winList);
+		AppendWindow(CreateMenu(SCANKEY_F2, 0), &winList);
+	else
+		SetHead(&winList, win);
+    }
+    break;
+    case SCANKEY_F3:
+    case SCANCON_F3:
+    {
+	Window *win = SearchWinListById(SCANKEY_F2, &winList);
+	if (win == NULL)
+		AppendWindow(CreateMenu(SCANKEY_F2, 1), &winList);
 	else
 		SetHead(&winList, win);
     }
     break;
     case SCANKEY_F4:
     case SCANCON_F4:
+    {
+	Window *win = SearchWinListById(SCANKEY_F2, &winList);
+	if (win == NULL)
+		AppendWindow(CreateMenu(SCANKEY_F2, 2), &winList);
+	else
+		SetHead(&winList, win);
+    }
+    break;
+    case SCANKEY_CTRL_u:
+    #if defined(UBENCH) && UBENCH == 1
+	draw.Flag.uBench = !draw.Flag.uBench;
+    #endif
+	break;
+    case SCANKEY_CTRL_x:
 	BITSET(LOCKLESS, Shutdown, 0);
 	break;
     case OPS_INTERVAL:
@@ -4975,9 +5176,13 @@ int Shortcut(SCANKEY *scan)
     }
     break;
     case SCANKEY_SHIFT_f:
-	draw.Flag.fahrCels = !draw.Flag.fahrCels;
+	Setting.fahrCels = !Setting.fahrCels;
 	if (draw.Disposal == D_DASHBOARD)
 		draw.Flag.layout = 1;
+    break;
+    case SCANKEY_SHIFT_y:
+	Setting.secret = !Setting.secret;
+	draw.Flag.layout = 1;
     break;
     case SCANKEY_SHIFT_h:
     {
@@ -6166,10 +6371,10 @@ int Shortcut(SCANKEY *scan)
 	Window *win = SearchWinListById(scan->key, &winList);
 	if (win == NULL) {
 		CLOCK_ARG clockMod  = {.sllong = scan->key};
-		signed int lowestShift, highestShift;
 		unsigned int NC = clockMod.NC & CLOCKMOD_RATIO_MASK,
 				maxRatio = MaxBoostRatio();
 
+		signed int lowestShift, highestShift;
 		ComputeRatioShifts(Shm->Proc.Boost[BOOST(TGT)],
 				Shm->Proc.Boost[BOOST(MIN)],
 				maxRatio,
@@ -6441,8 +6646,7 @@ int Shortcut(SCANKEY *scan)
 	RING_WRITE(Shm->Ring[1], COREFREQ_ORDER_MACHINE, COREFREQ_TOGGLE_OFF);
       }
     break;
-    case SCANKEY_F3:
-    case SCANCON_F3:
+    case SCANKEY_SHIFT_o:
     {
 	Window *win = SearchWinListById(scan->key, &winList);
 	if (win == NULL)
@@ -6644,7 +6848,7 @@ int Shortcut(SCANKEY *scan)
     case OPS_RECORDER_X120:
     case OPS_RECORDER_X240:
     {
-	typeof(recorder.Select) select = (scan->key & OPS_RECORDER_MASK) >> 4;
+	__typeof__(recorder.Select) select=(scan->key & OPS_RECORDER_MASK) >> 4;
 	recorder.Select = select;
 	RECORDER_COMPUTE(recorder, Shm->Sleep.Interval);
     }
@@ -6662,6 +6866,15 @@ int Shortcut(SCANKEY *scan)
       if (scan->key & TRACK_TASK) {
 	Shm->SysGate.trackTask = scan->key & TRACK_MASK;
 	draw.Flag.layout = 1;
+      }
+      else if (scan->key & SMBIOS_STRING_INDEX) {
+	if (draw.Disposal == D_MAINVIEW) {
+		enum SMB_STRING usrIdx = scan->key & SMBIOS_STRING_MASK;
+		if (usrIdx < SMB_STRING_COUNT) {
+			draw.SmbIndex = usrIdx;
+			draw.Flag.layout = 1;
+		}
+	}
       }
       else if (scan->key & CPU_ONLINE) {
 	const unsigned long cpu = scan->key & CPU_MASK;
@@ -6725,7 +6938,10 @@ void PrintTaskMemory(Layer *layer, CUINT row,
 			unsigned long freeRAM,
 			unsigned long totalRAM)
 {
-	sprintf(buffer, "%6u" "%9lu" "%-9lu", taskCount, freeRAM, totalRAM);
+	sprintf(buffer, "%6u" "%9lu" "%-9lu",
+			taskCount,
+			freeRAM >> draw.Unit.Memory,
+			totalRAM >> draw.Unit.Memory);
 
 	memcpy(&LayerAt(layer, code, (draw.Size.width-35), row), &buffer[0], 6);
 	memcpy(&LayerAt(layer, code, (draw.Size.width-22), row), &buffer[6], 9);
@@ -6761,12 +6977,14 @@ void Layout_Header(Layer *layer, CUINT row)
 
 	row++;
 
-	sprintf(buffer,"%2u" "%-2u", Shm->Proc.CPU.OnLine, Shm->Proc.CPU.Count);
+	sprintf(buffer,"%3u" "%-3u", Shm->Proc.CPU.OnLine, Shm->Proc.CPU.Count);
 
-	hProc1.code[2] = buffer[0];
-	hProc1.code[3] = buffer[1];
-	hProc1.code[5] = buffer[2];
-	hProc1.code[6] = buffer[3];
+	hProc1.code[1] = buffer[0];
+	hProc1.code[2] = buffer[1];
+	hProc1.code[3] = buffer[2];
+	hProc1.code[5] = buffer[3];
+	hProc1.code[6] = buffer[4];
+	hProc1.code[7] = buffer[5];
 
 	unsigned int L1I_Size = 0, L1D_Size = 0, L2U_Size = 0, L3U_Size = 0;
     if (Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL) {
@@ -6861,7 +7079,7 @@ void Layout_Ruller_Load(Layer *layer, CUINT row)
 	/* Alternate the color of the frequency ratios			*/
 	int idx = ratio.Count, bright = 1;
 	while (idx-- > 0) {
-		char tabStop[] = "00";
+		char tabStop[10+1] = "00";
 		int hPos=ratio.Uniq[idx] * draw.Area.LoadWidth / ratio.Maximum;
 		sprintf(tabStop, "%2u", ratio.Uniq[idx]);
 
@@ -7131,19 +7349,19 @@ CUINT Layout_Ruller_Tasks(Layer *layer, const unsigned int cpu, CUINT row)
 		}
 	};
 
-	struct {							\
-		Coordinate	origin;					\
-		CUINT		length;					\
-		ATTRIBUTE	*attr;					\
-		ASCII		*code;					\
-	} hTask1 = {							\
-		.origin = {						\
-			.col = 23,					\
-			.row = row					\
-		},							\
-		.length = 21,						\
-		.attr = hSort[Shm->SysGate.sortByField].attr,		\
-		.code = hSort[Shm->SysGate.sortByField].code		\
+	struct {
+		Coordinate	origin;
+		CUINT		length;
+		ATTRIBUTE	*attr;
+		ASCII		*code;
+	} hTask1 = {
+		.origin = {
+			.col = 23,
+			.row = row
+		},
+		.length = 21,
+		.attr = hSort[Shm->SysGate.sortByField].attr,
+		.code = hSort[Shm->SysGate.sortByField].code
 	};
 
 	struct {
@@ -7160,19 +7378,19 @@ CUINT Layout_Ruller_Tasks(Layer *layer, const unsigned int cpu, CUINT row)
 		}
 	};
 
-	struct {							\
-		Coordinate	origin;					\
-		CUINT		length;					\
-		ATTRIBUTE	*attr;					\
-		ASCII		*code;					\
-	} hTask2 = {							\
-		.origin = {						\
-			.col = (draw.Size.width - 18),			\
-			.row = (row + draw.Area.MaxRows + 1)		\
-		},							\
-		.length = 15,						\
-		.attr = hReverse[Shm->SysGate.reverseOrder].attr,	\
-		.code = hReverse[Shm->SysGate.reverseOrder].code	\
+	struct {
+		Coordinate	origin;
+		CUINT		length;
+		ATTRIBUTE	*attr;
+		ASCII		*code;
+	} hTask2 = {
+		.origin = {
+			.col = (draw.Size.width - 18),
+			.row = (row + draw.Area.MaxRows + 1)
+		},
+		.length = 15,
+		.attr = hReverse[Shm->SysGate.reverseOrder].attr,
+		.code = hReverse[Shm->SysGate.reverseOrder].code
 	};
 
 	LayerDeclare(	LAYOUT_TASKS_VALUE_SWITCH, 13,
@@ -7311,118 +7529,118 @@ void Layout_Footer(Layer *layer, CUINT row)
 	LayerCopyAt(	layer, hTech0.origin.col, hTech0.origin.row,
 			hTech0.length, hTech0.attr, hTech0.code);
 
-	if (Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL)
-	{
-	    LayerDeclare(LAYOUT_FOOTER_TECH_INTEL, 66,
+    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_INTEL)
+    {
+	LayerDeclare(	LAYOUT_FOOTER_TECH_INTEL, 66,
 			hTech0.length, hTech0.origin.row,
-			hTech1);
+			hTech1 );
 
-	    hTech1.attr[0] = hTech1.attr[1] = hTech1.attr[2] =
+	hTech1.attr[0] = hTech1.attr[1] = hTech1.attr[2] =
 					Pwr[Shm->Proc.Features.HyperThreading];
 
-		const ATTRIBUTE TM[] = {
-			MakeAttr(BLACK, 0, BLACK, 1),
-			MakeAttr(BLUE,  0, BLACK, 1),
-			MakeAttr(WHITE, 0, BLACK, 1),
-			MakeAttr(GREEN, 0, BLACK, 1)
-		};
+	const ATTRIBUTE TM[] = {
+		MakeAttr(BLACK, 0, BLACK, 1),
+		MakeAttr(BLUE,  0, BLACK, 1),
+		MakeAttr(WHITE, 0, BLACK, 1),
+		MakeAttr(GREEN, 0, BLACK, 1)
+	};
 
-	    hTech1.attr[4] = hTech1.attr[5] = hTech1.attr[6] =		\
-	    hTech1.attr[7] = Pwr[Shm->Proc.Technology.EIST];
+	hTech1.attr[4] = hTech1.attr[5] = hTech1.attr[6] =		\
+	hTech1.attr[7] = Pwr[Shm->Proc.Technology.EIST];
 
-	    hTech1.attr[9] = hTech1.attr[10] = hTech1.attr[11] =	\
+	hTech1.attr[9] = hTech1.attr[10] = hTech1.attr[11] =		\
 				Pwr[Shm->Proc.Features.Power.EAX.TurboIDA];
 
-	    hTech1.attr[13] = hTech1.attr[14] = hTech1.attr[15] =	\
-	    hTech1.attr[16] = hTech1.attr[17] = Pwr[Shm->Proc.Technology.Turbo];
+	hTech1.attr[13] = hTech1.attr[14] = hTech1.attr[15] =		\
+	hTech1.attr[16] = hTech1.attr[17] = Pwr[Shm->Proc.Technology.Turbo];
 
-	    hTech1.attr[19] = hTech1.attr[20] = hTech1.attr[21] =	\
+	hTech1.attr[19] = hTech1.attr[20] = hTech1.attr[21] =		\
 						Pwr[Shm->Proc.Technology.C1E];
 
-	    sprintf(buffer, "PM%1d", Shm->Proc.PM_version);
+	sprintf(buffer, "PM%1d", Shm->Proc.PM_version);
 
-	    hTech1.code[23] = buffer[0];
-	    hTech1.code[24] = buffer[1];
-	    hTech1.code[25] = buffer[2];
+	hTech1.code[23] = buffer[0];
+	hTech1.code[24] = buffer[1];
+	hTech1.code[25] = buffer[2];
 
-	    hTech1.attr[23] = hTech1.attr[24] = hTech1.attr[25] =	\
+	hTech1.attr[23] = hTech1.attr[24] = hTech1.attr[25] =		\
 						Pwr[(Shm->Proc.PM_version > 0)];
 
-	    hTech1.attr[27] = hTech1.attr[28] = hTech1.attr[29] =	\
+	hTech1.attr[27] = hTech1.attr[28] = hTech1.attr[29] =		\
 						Pwr[Shm->Proc.Technology.C3A];
 
-	    hTech1.attr[31] = hTech1.attr[32] = hTech1.attr[33] =	\
+	hTech1.attr[31] = hTech1.attr[32] = hTech1.attr[33] =		\
 						Pwr[Shm->Proc.Technology.C1A];
 
-	    hTech1.attr[35] = hTech1.attr[36] = hTech1.attr[37] =	\
+	hTech1.attr[35] = hTech1.attr[36] = hTech1.attr[37] =		\
 						Pwr[Shm->Proc.Technology.C3U];
 
-	    hTech1.attr[39] = hTech1.attr[40] = hTech1.attr[41] =	\
+	hTech1.attr[39] = hTech1.attr[40] = hTech1.attr[41] =		\
 						Pwr[Shm->Proc.Technology.C1U];
 
-	    hTech1.attr[43] = hTech1.attr[44] = 			\
+	hTech1.attr[43] = hTech1.attr[44] = 				\
 			TM[Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM1
 			  |Shm->Cpu[Shm->Proc.Service.Core].PowerThermal.TM2];
 
-	    LayerCopyAt(layer, hTech1.origin.col, hTech1.origin.row,
+	LayerCopyAt(layer, hTech1.origin.col, hTech1.origin.row,
 			hTech1.length, hTech1.attr, hTech1.code);
 
-	    LayerFillAt(layer, (hTech1.origin.col + hTech1.length),
+	LayerFillAt(layer, (hTech1.origin.col + hTech1.length),
 			hTech1.origin.row,
 			(draw.Size.width - hTech0.length - hTech1.length),
 			hSpace,
 			MakeAttr(BLACK, 0, BLACK, 1));
-	} else {
-	  if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
-	  {
-	    LayerDeclare(LAYOUT_FOOTER_TECH_AMD, 66,
+    } else {
+      if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
+      {
+	LayerDeclare(	LAYOUT_FOOTER_TECH_AMD, 66,
 			hTech0.length, hTech0.origin.row,
-			hTech1);
+			hTech1 );
 
-	    hTech1.attr[0] = hTech1.attr[1] = hTech1.attr[2] =		\
+	hTech1.attr[0] = hTech1.attr[1] = hTech1.attr[2] =		\
 					Pwr[Shm->Proc.Features.HyperThreading];
 
-	  hTech1.attr[4] = hTech1.attr[5] = hTech1.attr[ 6] = hTech1.attr[ 7]= \
-	  hTech1.attr[8] = hTech1.attr[9] = hTech1.attr[10] = hTech1.attr[11]= \
+	hTech1.attr[4] = hTech1.attr[5] = hTech1.attr[ 6] = hTech1.attr[ 7]= \
+	hTech1.attr[8] = hTech1.attr[9] = hTech1.attr[10] = hTech1.attr[11]= \
 					Pwr[(Shm->Proc.PowerNow == 0b11)];
 
-	    hTech1.attr[13] = hTech1.attr[14] = hTech1.attr[15] =	\
-	    hTech1.attr[16] = hTech1.attr[17] = Pwr[Shm->Proc.Technology.Turbo];
+	hTech1.attr[13] = hTech1.attr[14] = hTech1.attr[15] =		\
+	hTech1.attr[16] = hTech1.attr[17] = Pwr[Shm->Proc.Technology.Turbo];
 
-	    hTech1.attr[19] = hTech1.attr[20] = hTech1.attr[21] =	\
+	hTech1.attr[19] = hTech1.attr[20] = hTech1.attr[21] =		\
 						Pwr[Shm->Proc.Technology.C1E];
 
-	    hTech1.attr[23] = hTech1.attr[24] = hTech1.attr[25] =	\
+	hTech1.attr[23] = hTech1.attr[24] = hTech1.attr[25] =		\
 						Pwr[Shm->Proc.Technology.CC6];
 
-	    hTech1.attr[27] = hTech1.attr[28] = hTech1.attr[29] =	\
+	hTech1.attr[27] = hTech1.attr[28] = hTech1.attr[29] =		\
 						Pwr[Shm->Proc.Technology.PC6];
 
-	    sprintf(buffer, "PM%1d", Shm->Proc.PM_version);
+	sprintf(buffer, "PM%1d", Shm->Proc.PM_version);
 
-	    hTech1.code[31] = buffer[0];
-	    hTech1.code[32] = buffer[1];
-	    hTech1.code[33] = buffer[2];
+	hTech1.code[31] = buffer[0];
+	hTech1.code[32] = buffer[1];
+	hTech1.code[33] = buffer[2];
 
-	    hTech1.attr[31] = hTech1.attr[32] = hTech1.attr[33] =	\
+	hTech1.attr[31] = hTech1.attr[32] = hTech1.attr[33] =		\
 						Pwr[(Shm->Proc.PM_version > 0)];
 
-	    hTech1.attr[35] = hTech1.attr[36] = hTech1.attr[37] =	\
+	hTech1.attr[35] = hTech1.attr[36] = hTech1.attr[37] =		\
 				Pwr[(Shm->Proc.Features.AdvPower.EDX.TS != 0)];
 
-	    hTech1.attr[39] = hTech1.attr[40] = hTech1.attr[41] =	\
+	hTech1.attr[39] = hTech1.attr[40] = hTech1.attr[41] =		\
 				Pwr[(Shm->Proc.Features.AdvPower.EDX.TTP != 0)];
 
-	    LayerCopyAt(layer, hTech1.origin.col, hTech1.origin.row,
+	LayerCopyAt(layer, hTech1.origin.col, hTech1.origin.row,
 			hTech1.length, hTech1.attr, hTech1.code);
 
-	    LayerFillAt(layer, (hTech1.origin.col + hTech1.length),
+	LayerFillAt(layer, (hTech1.origin.col + hTech1.length),
 			hTech1.origin.row,
 			(draw.Size.width - hTech0.length - hTech1.length),
 			hSpace,
 			MakeAttr(BLACK, 0, BLACK, 1));
-	  }
-	}
+      }
+    }
 	row++;
 
 	len = sprintf(	buffer, "%s",
@@ -7465,22 +7683,18 @@ void Layout_Footer(Layer *layer, CUINT row)
 
 	col++;
 
-	LayerDeclare(	LAYOUT_FOOTER_SYSTEM, 64,
-			(draw.Size.width - 64), row, hSys1);
+	LayerDeclare(	LAYOUT_FOOTER_SYSTEM, RSZ(LAYOUT_FOOTER_SYSTEM),
+			(draw.Size.width - RSZ(LAYOUT_FOOTER_SYSTEM)),row,hSys1);
 
-	len = hSys1.origin.col - col;
-	if ((signed int) len  > 0) {
-		LayerFillAt(	layer, col, hSys1.origin.row,
-				len, hSpace,
-				MakeAttr(BLACK, 0, BLACK, 1));
-	}
 	LayerCopyAt(	layer, hSys1.origin.col, hSys1.origin.row,
 			hSys1.length, hSys1.attr, hSys1.code);
-
-	if ((len = strlen(Shm->SMB.Board.Name)) > 0) {
-		len = KMIN(22, len);
-		memcpy(&LayerAt(layer, code,hSys1.origin.col,hSys1.origin.row),
-			Shm->SMB.Board.Name, len);
+	/* Center the DMI string					*/
+	if ((len = strlen(Shm->SMB.String[draw.SmbIndex])) > 0) {
+		CUINT	can = CUMIN(hSys1.origin.col - col - 1, len),
+			ctr = ((hSys1.origin.col + col) - can) / 2;
+		LayerFillAt(	layer, ctr, hSys1.origin.row,
+				can, ScrambleSMBIOS(draw.SmbIndex, 4, '-'),
+				MakeAttr(BLUE, 0, BLACK, 1) );
 	}
 	/* Reset Tasks count & Memory usage				*/
 	if (BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1))
@@ -7488,15 +7702,20 @@ void Layout_Footer(Layer *layer, CUINT row)
 				Shm->SysGate.taskCount,
 				Shm->SysGate.memInfo.freeram,
 				Shm->SysGate.memInfo.totalram);
+	/* Print the memory unit character				*/
+	LayerAt(layer, code,
+		hSys1.origin.col + (RSZ(LAYOUT_FOOTER_SYSTEM) - 3),
+		hSys1.origin.row) =	draw.Unit.Memory ==  0 ? 'K'
+				:	draw.Unit.Memory == 10 ? 'M'
+				:	draw.Unit.Memory == 20 ? 'G' : 0x20;
 }
 
 void Layout_Load_UpperView(Layer *layer, const unsigned int cpu, CUINT row)
 {
-	sprintf(buffer, "%-2u", cpu);
-	LayerAt(layer, attr, 0, row) = MakeAttr(WHITE, 0, BLACK, 0);
-	LayerAt(layer, code, 0, row) = '#';
-	LayerAt(layer, code, 1, row) = buffer[0];
-	LayerAt(layer, code, 2, row) = buffer[1];
+	sprintf(buffer, "%03u", cpu);
+	LayerAt(layer, code, 0, row) = buffer[0];
+	LayerAt(layer, code, 1, row) = buffer[1];
+	LayerAt(layer, code, 2, row) = buffer[2];
 
 	LayerAt(layer, attr, 3, row) = MakeAttr(YELLOW, 0, BLACK, 1);
 	LayerAt(layer, code, 3, row) = 0x20;
@@ -7504,11 +7723,9 @@ void Layout_Load_UpperView(Layer *layer, const unsigned int cpu, CUINT row)
 
 void Layout_Load_LowerView(Layer *layer, CUINT row)
 {
-	LayerAt(layer, attr, 0, (1 + row + draw.Area.MaxRows)) =	\
-						MakeAttr(WHITE,0,BLACK,0);
-	LayerAt(layer, code, 0, (1 + row + draw.Area.MaxRows)) = '#';
-	LayerAt(layer, code, 1, (1 + row + draw.Area.MaxRows)) = buffer[0];
-	LayerAt(layer, code, 2, (1 + row + draw.Area.MaxRows)) = buffer[1];
+	LayerAt(layer, code, 0, (1 + row + draw.Area.MaxRows)) = buffer[0];
+	LayerAt(layer, code, 1, (1 + row + draw.Area.MaxRows)) = buffer[1];
+	LayerAt(layer, code, 2, (1 + row + draw.Area.MaxRows)) = buffer[2];
 }
 
 void Draw_Load(Layer *layer, const unsigned int cpu, CUINT row)
@@ -7522,7 +7739,7 @@ void Draw_Load(Layer *layer, const unsigned int cpu, CUINT row)
 				* draw.Area.LoadWidth) / ratio.Maximum,
 			bar1 = draw.Area.LoadWidth - bar0;
 		/* Print the Per Core BCLK indicator (yellow)		*/
-		LayerAt(layer, code, (LOAD_LEAD - 1), row) =		\
+		LayerAt(layer, code, (LOAD_LEAD - 1), row) =
 			(draw.iClock == (cpu - draw.cpuScroll)) ? '~' : 0x20;
 		/* Draw the relative Core frequency ratio		*/
 		LayerFillAt(layer, LOAD_LEAD, row,
@@ -7596,34 +7813,35 @@ size_t Draw_Frequency_Spaces(struct FLIP_FLOP *CFlop, CPU_STRUCT *Cpu)
 		11, hSpace));
 }
 
-CUINT Draw_Monitor_Frequency(Layer *layer, const unsigned int cpu, CUINT row)
-{
-	struct FLIP_FLOP *CFlop=&Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
-	size_t (*Draw_Frequency_Temp[])(struct FLIP_FLOP*, CPU_STRUCT*) = {
+size_t (*Draw_Frequency_Temp[])(struct FLIP_FLOP*, CPU_STRUCT*) = {
 			Draw_Frequency_Celsius,
 			Draw_Frequency_Fahrenheit,
 			Draw_Frequency_Spaces
-	}, len = 0;
+};
+
+CUINT Draw_Monitor_Frequency(Layer *layer, const unsigned int cpu, CUINT row)
+{
+	struct FLIP_FLOP *CFlop=&Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
+	size_t len = 0;
 
     switch (Shm->Proc.thermalFormula) {
     case THERMAL_FORMULA_INTEL:
     case THERMAL_FORMULA_AMD:
     case THERMAL_FORMULA_AMD_0Fh:
-	len = Draw_Frequency_Temp[draw.Flag.fahrCels](CFlop, &Shm->Cpu[cpu]);
+	len = Draw_Frequency_Temp[Setting.fahrCels](CFlop, &Shm->Cpu[cpu]);
 	break;
     case THERMAL_FORMULA_AMD_15h:
     case THERMAL_FORMULA_AMD_17h:
       if (cpu == Shm->Proc.Service.Core) {
-	len = Draw_Frequency_Temp[draw.Flag.fahrCels](CFlop, &Shm->Cpu[cpu]);
+	len = Draw_Frequency_Temp[Setting.fahrCels](CFlop, &Shm->Cpu[cpu]);
       } else {
-	len = Draw_Frequency_Temp[draw.Flag.fahrCels](CFlop, NULL);
+	len = Draw_Frequency_Temp[2](CFlop, NULL);
       }
 	break;
     case THERMAL_FORMULA_NONE:
-	len = Draw_Frequency_Temp[draw.Flag.fahrCels](CFlop, NULL);
+	len = Draw_Frequency_Temp[2](CFlop, NULL);
 	break;
     }
-
 	memcpy(&LayerAt(layer, code, LOAD_LEAD, row), buffer, len);
 
 	ATTRIBUTE warning = {.fg = WHITE, .un = 0, .bg = BLACK, .bf = 1};
@@ -7634,10 +7852,10 @@ CUINT Draw_Monitor_Frequency(Layer *layer, const unsigned int cpu, CUINT row)
 		if (CFlop->Thermal.Temp >= Shm->Cpu[cpu].PowerThermal.Limit[1])
 			warning = MakeAttr(YELLOW, 0, BLACK, 0);
 	}
-	if (CFlop->Thermal.Events & (	EVENT_THERM_SENSOR
-				      |	EVENT_THERM_PROCHOT
-				      |	EVENT_THERM_CRIT
-				      |	EVENT_THERM_THOLD ))
+	if ( CFlop->Thermal.Events & (	EVENT_THERM_SENSOR
+				     |	EVENT_THERM_PROCHOT
+				     |	EVENT_THERM_CRIT
+				     |	EVENT_THERM_THOLD ) )
 	{
 		warning = MakeAttr(RED, 0, BLACK, 1);
 	}
@@ -7858,7 +8076,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC02 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC02, 100.f * Shm->Proc.State.PC02,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, row), buffer, len);
@@ -7866,7 +8085,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC03 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC03, 100.f * Shm->Proc.State.PC03,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 1)), buffer, len);
@@ -7874,7 +8094,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC06 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC06, 100.f * Shm->Proc.State.PC06,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 2)), buffer, len);
@@ -7882,7 +8103,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC07 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC07, 100.f * Shm->Proc.State.PC07,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 3)), buffer, len);
@@ -7890,7 +8112,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC08 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC08, 100.f * Shm->Proc.State.PC08,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 4)), buffer, len);
@@ -7898,7 +8121,8 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC09 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC09, 100.f * Shm->Proc.State.PC09,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 5)), buffer, len);
@@ -7906,15 +8130,16 @@ CUINT Draw_AltMonitor_Package(Layer *layer, const unsigned int cpu, CUINT row)
 	bar0 = Shm->Proc.State.PC10 * margin;
 	bar1 = margin - bar0;
 
-	len = sprintf(	buffer, "%18llu" "%7.2f" "%% " "%.*s" "%.*s",
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%7.2f" "%% " "%.*s" "%.*s",
 			PFlop->Delta.PC10, 100.f * Shm->Proc.State.PC10,
 			bar0, hBar, bar1, hSpace);
 	memcpy(&LayerAt(layer, code, 5, (row + 6)), buffer, len);
 /* TSC & UNCORE */
-	len = sprintf(buffer, "%18llu", PFlop->Delta.PTSC);
-	memcpy(&LayerAt(layer, code, 5,(row+7)), buffer, len);
-	len = sprintf(buffer, "UNCORE:%18llu", PFlop->Uncore.FC0);
-	memcpy(&LayerAt(layer, code, 50, (row + 7)), buffer, len);
+	len = snprintf(	buffer, draw.Area.LoadWidth,
+			"%18llu" "%.*s" "UNCORE:%18llu",
+			PFlop->Delta.PTSC, 7+2+18, hSpace, PFlop->Uncore.FC0);
+	memcpy(&LayerAt(layer, code, 5, (row + 7)), buffer, len);
 
 	row += 1 + 8;
 	return(row);
@@ -7999,7 +8224,7 @@ CUINT Draw_AltMonitor_Tasks(Layer *layer, const unsigned int cpu, CUINT row)
 	      {
 		LayerAt(layer, attr,
 			cTask[Shm->SysGate.taskList[idx].wake_cpu].col,
-			cTask[Shm->SysGate.taskList[idx].wake_cpu].row) = \
+			cTask[Shm->SysGate.taskList[idx].wake_cpu].row) =
 						MakeAttr(WHITE, 0, BLACK, 0);
 		LayerAt(layer, code,
 			cTask[Shm->SysGate.taskList[idx].wake_cpu].col,
@@ -8061,21 +8286,27 @@ CUINT Draw_AltMonitor_Power(Layer *layer, const unsigned int cpu, CUINT row)
 	return(row);
 }
 
-void Draw_Footer_Voltage_Fahrenheit(struct PKG_FLIP_FLOP *PFlop,
-					struct FLIP_FLOP *SProc)
+void Draw_Footer_Voltage_Fahrenheit(	struct PKG_FLIP_FLOP *PFlop,
+					struct FLIP_FLOP *SProc )
 {
 	sprintf(buffer, "%3u%4.2f",
 			Cels2Fahr(PFlop->Thermal.Temp),
 			SProc->Voltage.Vcore);
 }
 
-void Draw_Footer_Voltage_Celsius(struct PKG_FLIP_FLOP *PFlop,
-				struct FLIP_FLOP *SProc)
+void Draw_Footer_Voltage_Celsius(	struct PKG_FLIP_FLOP *PFlop,
+					struct FLIP_FLOP *SProc )
 {
 	sprintf(buffer, "%3u%4.2f",
 			PFlop->Thermal.Temp,
 			SProc->Voltage.Vcore);
 }
+
+void (*Draw_Footer_Voltage_Temp[])(	struct PKG_FLIP_FLOP*,
+					struct FLIP_FLOP* ) = {
+	Draw_Footer_Voltage_Celsius,
+	Draw_Footer_Voltage_Fahrenheit
+};
 
 void Draw_Footer(Layer *layer, CUINT row)
 {	/* Update Footer view area					*/
@@ -8089,11 +8320,6 @@ void Draw_Footer(Layer *layer, CUINT row)
 		RSC(HOT_EVENT_COND2).ATTR(),
 		RSC(HOT_EVENT_COND3).ATTR(),
 		RSC(HOT_EVENT_COND4).ATTR()
-	};
-	void (*Draw_Footer_Voltage_Temp[])(	struct PKG_FLIP_FLOP*,
-						struct FLIP_FLOP*) = {
-		Draw_Footer_Voltage_Celsius,
-		Draw_Footer_Voltage_Fahrenheit
 	};
 	unsigned int _hot = 0, _tmp = 0;
 
@@ -8123,10 +8349,16 @@ void Draw_Footer(Layer *layer, CUINT row)
 	LayerAt(layer, attr, 14+63, row) = eventAttr[_tmp][1];
 	LayerAt(layer, attr, 14+64, row) = eventAttr[_tmp][2];
 
-	Draw_Footer_Voltage_Temp[draw.Flag.fahrCels](PFlop, SProc);
+	Draw_Footer_Voltage_Temp[Setting.fahrCels](PFlop, SProc);
 
-	memcpy(&LayerAt(layer, code, 76, row), &buffer[0], 3);
-	memcpy(&LayerAt(layer, code, 68, row), &buffer[3], 4);
+	LayerAt(layer, code, 76, row) = buffer[0];
+	LayerAt(layer, code, 77, row) = buffer[1];
+	LayerAt(layer, code, 78, row) = buffer[2];
+
+	LayerAt(layer, code, 68, row) = buffer[3];
+	LayerAt(layer, code, 69, row) = buffer[4];
+	LayerAt(layer, code, 70, row) = buffer[5];
+	LayerAt(layer, code, 71, row) = buffer[6];
 
 	if (BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1)
 	&& (Shm->SysGate.tickStep == Shm->SysGate.tickReset)) {
@@ -8237,6 +8469,10 @@ VIEW_FUNC Matrix_Draw_AltMon[VIEW_SIZE] = {
 
 #define Illuminates_CPU(_layer, _row, fg, bg, hi)			\
 ({									\
+	LayerAt(_layer, attr, 0, _row) =				\
+		LayerAt(_layer, attr, 0, (1 + _row + draw.Area.MaxRows)) =\
+						MakeAttr(fg, 0, bg, hi);\
+									\
 	LayerAt(_layer, attr, 1, _row) =				\
 		LayerAt(_layer, attr, 1, (1 + _row + draw.Area.MaxRows)) =\
 						MakeAttr(fg, 0, bg, hi);\
@@ -8346,19 +8582,19 @@ void Layout_Card_Core(Layer *layer, Card* card)
 
 	if (!BITVAL(Shm->Cpu[_cpu].OffLine, OS))
 	{
-	    if (draw.Flag.fahrCels) {
+	    if (Setting.fahrCels) {
 		LayerDeclare(	LAYOUT_CARD_CORE_ONLINE_COND1,(4 * INTER_WIDTH),
 				card->origin.col, (card->origin.row + 3),
 				hOnLine);
 
-		LayerCopyAt(layer, hOnLine.origin.col, hOnLine.origin.row, \
+		LayerCopyAt(layer, hOnLine.origin.col, hOnLine.origin.row,
 				hOnLine.length, hOnLine.attr, hOnLine.code);
 	    } else {
 		LayerDeclare(	LAYOUT_CARD_CORE_ONLINE_COND0,(4 * INTER_WIDTH),
 				card->origin.col, (card->origin.row + 3),
 				hOnLine);
 
-		LayerCopyAt(layer, hOnLine.origin.col, hOnLine.origin.row, \
+		LayerCopyAt(layer, hOnLine.origin.col, hOnLine.origin.row,
 				hOnLine.length, hOnLine.attr, hOnLine.code);
 	    }
 	} else {
@@ -8368,18 +8604,22 @@ void Layout_Card_Core(Layer *layer, Card* card)
 
 		card->data.dword.hi = RENDER_KO;
 
-		LayerFillAt(layer, card->origin.col, (card->origin.row + 1), \
+		LayerFillAt(layer, card->origin.col, (card->origin.row + 1),
 		(4 * INTER_WIDTH), " _  _  _  _ ", MakeAttr(BLACK,0,BLACK,1));
 
-		LayerCopyAt(layer, hOffLine.origin.col, hOffLine.origin.row, \
+		LayerCopyAt(layer, hOffLine.origin.col, hOffLine.origin.row,
 				hOffLine.length, hOffLine.attr, hOffLine.code);
 	}
 	LayerAt(layer, code,
-		(card->origin.col + 3),			\
+		(card->origin.col + 2),
+		(card->origin.row + 3)) = digit[6] + '0';
+
+	LayerAt(layer, code,
+		(card->origin.col + 3),
 		(card->origin.row + 3)) = digit[7] + '0';
 
-	LayerAt(layer, code,				\
-		(card->origin.col + 4),			\
+	LayerAt(layer, code,
+		(card->origin.col + 4),
 		(card->origin.row + 3)) = digit[8] + '0';
 }
 
@@ -8389,7 +8629,7 @@ void Layout_Card_CLK(Layer *layer, Card* card)
 			card->origin.col, (card->origin.row + 3),
 			hCLK);
 
-	LayerCopyAt(	layer, hCLK.origin.col, hCLK.origin.row,	\
+	LayerCopyAt(	layer, hCLK.origin.col, hCLK.origin.row,
 			hCLK.length, hCLK.attr, hCLK.code);
 }
 
@@ -8404,7 +8644,7 @@ void Layout_Card_Uncore(Layer *layer, Card* card)
 	hUncore.code[ 9] = buffer[1];
 	hUncore.code[10] = buffer[2];
 
-	LayerCopyAt(	layer, hUncore.origin.col, hUncore.origin.row,	\
+	LayerCopyAt(	layer, hUncore.origin.col, hUncore.origin.row,
 			hUncore.length, hUncore.attr, hUncore.code);
 }
 
@@ -8435,7 +8675,7 @@ void Layout_Card_Bus(Layer *layer, Card* card)
 		break;
 	}
 
-	LayerCopyAt(	layer, hBus.origin.col, hBus.origin.row,	\
+	LayerCopyAt(	layer, hBus.origin.col, hBus.origin.row,
 			hBus.length, hBus.attr, hBus.code);
 
 	Counter2LCD(	layer, card->origin.col, card->origin.row,
@@ -8469,7 +8709,7 @@ void Layout_Card_MC(Layer *layer, Card* card)
 	for (sdx = 0, ldx = 10 - bdx; sdx < bdx; sdx++, ldx++)
 		hRAM.code[ldx] = buffer[sdx];
 
-	LayerCopyAt(	layer, hRAM.origin.col, hRAM.origin.row,	\
+	LayerCopyAt(	layer, hRAM.origin.col, hRAM.origin.row,
 			hRAM.length, hRAM.attr, hRAM.code);
 	if (Shm->Uncore.CtrlCount > 0) {
 		Counter2LCD(layer, card->origin.col, card->origin.row,
@@ -8483,7 +8723,7 @@ void Layout_Card_Load(Layer *layer, Card* card)
 			card->origin.col, (card->origin.row + 3),
 			hLoad);
 
-	LayerCopyAt(	layer, hLoad.origin.col, hLoad.origin.row,	\
+	LayerCopyAt(	layer, hLoad.origin.col, hLoad.origin.row,
 			hLoad.length, hLoad.attr, hLoad.code);
 }
 
@@ -8493,7 +8733,7 @@ void Layout_Card_Idle(Layer *layer, Card* card)
 			card->origin.col, (card->origin.row + 3),
 			hIdle);
 
-	LayerCopyAt(	layer, hIdle.origin.col, hIdle.origin.row,	\
+	LayerCopyAt(	layer, hIdle.origin.col, hIdle.origin.row,
 			hIdle.length, hIdle.attr, hIdle.code);
 }
 
@@ -8530,7 +8770,7 @@ void Layout_Card_RAM(Layer *layer, Card* card)
 	sprintf(buffer, "%2lu%c", totalRAM, symbol);
 	memcpy(&hMem.code[8], buffer, 3);
 
-	LayerCopyAt(	layer, hMem.origin.col, hMem.origin.row,	\
+	LayerCopyAt(	layer, hMem.origin.col, hMem.origin.row,
 			hMem.length, hMem.attr, hMem.code);
     } else
 	card->data.dword.hi = RENDER_KO;
@@ -8543,7 +8783,7 @@ void Layout_Card_Task(Layer *layer, Card* card)
 			hSystem);
 
 	if (BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1))
-		LayerCopyAt(	layer, hSystem.origin.col, hSystem.origin.row,\
+		LayerCopyAt(	layer, hSystem.origin.col, hSystem.origin.row,
 				hSystem.length, hSystem.attr, hSystem.code);
 	else
 		card->data.dword.hi = RENDER_KO;
@@ -8592,7 +8832,7 @@ void Draw_Card_Core(Layer *layer, Card* card)
 	struct FLIP_FLOP *CFlop = \
 			&Shm->Cpu[_cpu].FlipFlop[!Shm->Cpu[_cpu].Toggle];
 
-	ATTRIBUTE warning = {.fg=WHITE, .un=0, .bg=BLACK, .bf=1};
+	ATTRIBUTE warning = {.fg = WHITE, .un = 0, .bg = BLACK, .bf = 1};
 
 	Clock2LCD(layer, card->origin.col, card->origin.row,
 			CFlop->Relative.Freq, CFlop->Relative.Ratio);
@@ -8606,7 +8846,7 @@ void Draw_Card_Core(Layer *layer, Card* card)
 		warning = MakeAttr(RED, 0, BLACK, 1);
 	}
 
-	Dec2Digit( draw.Flag.fahrCels	? Cels2Fahr(CFlop->Thermal.Temp)
+	Dec2Digit( Setting.fahrCels	? Cels2Fahr(CFlop->Thermal.Temp)
 					: CFlop->Thermal.Temp, digit );
 
 	LayerAt(layer, attr, (card->origin.col + 6), (card->origin.row + 3)) = \
@@ -8720,25 +8960,25 @@ void Draw_Card_Task(Layer *layer, Card* card)
 	ATTRIBUTE *stateAttr;
 	stateAttr = StateToSymbol(Shm->SysGate.taskList[0].state, stateStr);
 
-	sprintf(buffer, "%.*s%s%.*s",
-			hl, hSpace,
-			Shm->SysGate.taskList[0].comm,
-			hr, hSpace);
+	snprintf(buffer, 12+1, "%.*s%s%.*s",
+				hl, hSpace,
+				Shm->SysGate.taskList[0].comm,
+				hr, hSpace);
 
-	LayerCopyAt(layer,	(card->origin.col + 0) ,		\
-				(card->origin.row + 1) ,		\
-				12 ,					\
-				stateAttr ,				\
+	LayerCopyAt(layer,	(card->origin.col + 0),
+				(card->origin.row + 1),
+				12,
+				stateAttr,
 				buffer);
 
 	len = sprintf(buffer, "%5u (%c)",
 				Shm->SysGate.taskList[0].pid,
 				stateStr[0]);
 
-	LayerFillAt(layer,	(card->origin.col + 2) ,		\
-				(card->origin.row + 2) ,		\
-				len ,					\
-				buffer ,				\
+	LayerFillAt(layer,	(card->origin.col + 2),
+				(card->origin.row + 2),
+				len,
+				buffer,
 				MakeAttr(WHITE, 0, BLACK, 0));
 
 	sprintf(buffer, "%5u", Shm->SysGate.taskCount);
@@ -8879,8 +9119,22 @@ void Dynamic_NoHeader_SingleView_NoFooter(Layer *layer)
 {
 }
 
+UBENCH_DECLARE()
 
-REASON_CODE Top(char option, int fahrCels)
+#if defined(UBENCH) && UBENCH == 1
+    #define Draw_uBenchmark(layer)					\
+    ({									\
+	if (draw.Flag.uBench) {						\
+		size_t len = sprintf(buffer, "%llu", UBENCH_METRIC());	\
+		LayerFillAt(	layer, 0, 0, len, buffer,		\
+				MakeAttr(MAGENTA, 0, BLACK, 1) );	\
+	}								\
+    })
+#else
+    #define Draw_uBenchmark(layer) {}
+#endif /* UBENCH */
+
+REASON_CODE Top(char option)
 {
 /*
            SCREEN
@@ -8932,7 +9186,6 @@ REASON_CODE Top(char option, int fahrCels)
 	};
 
 	draw.Disposal = (option == 'd') ? D_DASHBOARD : D_MAINVIEW;
-	draw.Flag.fahrCels = fahrCels;
 
 	RECORDER_COMPUTE(recorder, Shm->Sleep.Interval);
 
@@ -8947,7 +9200,7 @@ REASON_CODE Top(char option, int fahrCels)
 	  if (GetKey(&scan, &Shm->Sleep.pollingWait) > 0) {
 	    if (Shortcut(&scan) == -1) {
 		if (IsDead(&winList)) {
-			AppendWindow(CreateMenu(SCANKEY_F2), &winList);
+			AppendWindow(CreateMenu(SCANKEY_F2, 0), &winList);
 		}
 		else if (Motion_Trigger(&scan,GetFocus(&winList),&winList) > 0)
 		{
@@ -8981,6 +9234,8 @@ REASON_CODE Top(char option, int fahrCels)
 
       if (draw.Flag.height & draw.Flag.width)
       {
+	UBENCH_RDCOUNTER(1);
+
 	if (draw.Flag.clear) {
 		draw.Flag.clear  = 0;
 		draw.Flag.layout = 1;
@@ -9006,9 +9261,14 @@ REASON_CODE Top(char option, int fahrCels)
 		} while (BITVAL(Shm->Cpu[draw.iClock].OffLine, OS)
 			&& (draw.iClock != Shm->Proc.Service.Core)) ;
 	}
+	Draw_uBenchmark(dLayer);
 	/* Write to the standard output.				*/
 	draw.Flag.layout = WriteConsole(draw.Size, buffer);
-      } else
+
+	UBENCH_RDCOUNTER(2);
+	UBENCH_COMPUTE();
+      }
+      else
 	printf( CUH RoK "Term(%u x %u) < View(%u x %u)\n",
 		draw.Size.width,draw.Size.height,MIN_WIDTH,draw.Area.MinHeight);
     }
@@ -9060,7 +9320,7 @@ REASON_CODE Help(REASON_CODE reason, ...)
 int main(int argc, char *argv[])
 {
 	struct stat shmStat = {0};
-	int	fd = -1, idx = 0, fahrCels = 0;
+	int	fd = -1, idx = 0;
 	char	*program = strdup(argv[0]),
 		*appName = program != NULL ? basename(program) : argv[idx],
 		option = 't';
@@ -9086,12 +9346,37 @@ int main(int argc, char *argv[])
 			PROT_READ|PROT_WRITE, MAP_SHARED,
 			fd, 0)) != MAP_FAILED)
       {
+       if (CHK_FOOTPRINT(Shm->FootPrint,COREFREQ_MAJOR,
+					COREFREQ_MINOR,
+					COREFREQ_REV)	)
+       {
 	ClientFollowService(&localService, &Shm->Proc.Service, 0);
+
+	UBENCH_SETUP((Shm->Proc.Features.AdvPower.EDX.Inv_TSC == 1)
+		    || (Shm->Proc.Features.ExtInfo.EDX.RDTSCP == 1));
 
 	do {
 	    switch (option) {
+	    case '0' ... '2':
+		draw.Unit.Memory = 10 * (option - '0');
+		break;
 	    case 'F':
-		fahrCels = 1;
+		Setting.fahrCels = 1;
+		break;
+	    case 'J':
+		if (++idx < argc) {
+			enum SMB_STRING usrIdx = SMB_BOARD_NAME;
+			char trailing =  '\0';
+			if ((sscanf(argv[idx], "%u%c", &usrIdx, &trailing) != 1)
+			 || (usrIdx >= SMB_STRING_COUNT)) {
+				goto SYNTAX_ERROR;
+			} else {
+				draw.SmbIndex = usrIdx;
+			}
+		}
+		break;
+	    case 'Y':
+		Setting.secret = 0;
 		break;
 	    case 'B':
 		reason = SysInfoSMBIOS(NULL, 80, NULL);
@@ -9190,16 +9475,18 @@ int main(int argc, char *argv[])
 		TERMINAL(IN);
 
 		TrapSignal(1);
-		reason = Top(option, fahrCels);
+		reason = Top(option);
 		TrapSignal(0);
 
 		TERMINAL(OUT);
 		}
 		break;
 	    default:
+	    SYNTAX_ERROR:
 		{
 		REASON_SET(reason, RC_CMD_SYNTAX, 0);
 		reason = Help(reason, appName);
+		idx = argc;
 		}
 		break;
 	    }
@@ -9211,6 +9498,16 @@ int main(int argc, char *argv[])
 		REASON_SET(reason, RC_SHM_MMAP);
 		reason = Help(reason, SHM_FILENAME);
 	}
+       } else {
+		char wrongVersion[22+1];
+		sprintf(wrongVersion, "Version %hhd.%hhd.%hhd",
+			Shm->FootPrint.major,
+			Shm->FootPrint.minor,
+			Shm->FootPrint.rev);
+		munmap(Shm, shmStat.st_size);
+		REASON_SET(reason, RC_SHM_MMAP, EPERM);
+		reason = Help(reason, wrongVersion);
+       }
       } else {
 		REASON_SET(reason, RC_SHM_MMAP);
 		reason = Help(reason, SHM_FILENAME);
@@ -9234,3 +9531,4 @@ int main(int argc, char *argv[])
     }
     return(reason.rc);
 }
+

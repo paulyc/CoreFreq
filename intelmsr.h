@@ -41,12 +41,15 @@
 #endif
 
 #ifndef MSR_PMG_IO_CAPTURE_BASE
-	#define MSR_PMG_IO_CAPTURE_BASE		0x000000e4
+	#define MSR_PMG_IO_CAPTURE_BASE 	0x000000e4
 #endif
 
 #define MSR_NHM_UNCORE_PERF_GLOBAL_CTRL 	0x00000391
 #define MSR_SNB_UNCORE_PERF_GLOBAL_CTRL 	0x00000391
 #define MSR_SKL_UNCORE_PERF_GLOBAL_CTRL 	0x00000e01
+
+#define MSR_SNB_EP_PMON_GLOBAL_CTRL		0x00000c00
+#define MSR_HSW_EP_PMON_GLOBAL_CTRL		0x00000700
 
 #define MSR_NHM_UNCORE_PERF_GLOBAL_STATUS	0x00000392
 #define MSR_SNB_UNCORE_PERF_GLOBAL_STATUS	0x00000392
@@ -1060,6 +1063,20 @@ typedef union
 {
 	unsigned long long	value;
 	struct {
+		unsigned long long		/* Pkg: R/W		*/
+		PMI_Core_Select : 15-0,
+		ReservedBits1	: 29-15,
+		Unfreeze_All	: 30-29,
+		WakeOnPMI	: 31-30,
+		Freeze_All	: 32-31,
+		ReservedBits2	: 64-32;
+	};	/* 06_3EH/06_3FH					*/
+} UNCORE_PMON_GLOBAL_CONTROL;
+
+typedef union
+{
+	unsigned long long	value;
+	struct {
 		unsigned long long		/* Pkg: R/O		*/
 		PU		:  4-0,
 		ReservedBits1	:  8-4,
@@ -1648,13 +1665,13 @@ typedef union	/* Nehalem						*/
 	};
 } NHM_IMC_REFRESH_TIMING;
 
-typedef union	/* Nehalem						*/
+typedef union	/* Nehalem, Westmere					*/
 {	/* Device: 3 - Function: 0 - Offset: 48h			*/
 	unsigned int		value;
 	struct {
 		unsigned int
 		CLOSED_PAGE	:  1-0,
-		EN_ECC		:  2-1, /* Bloomfield			*/
+		ECC_ENABLED	:  2-1, /* Bloomfield			*/
 		AUTOPRECHARGE	:  3-2,
 		CHANNELRESET0	:  4-3,
 		CHANNELRESET1	:  5-4,
@@ -1668,7 +1685,7 @@ typedef union	/* Nehalem						*/
 	};
 } NHM_IMC_CONTROL;
 
-typedef union	/* Nehalem						*/
+typedef union	/* Nehalem, Westmere					*/
 {	/* Device: 3 - Function: 0 - Offset: 4Ch			*/
 	unsigned int		value;
 	struct {
@@ -1676,8 +1693,9 @@ typedef union	/* Nehalem						*/
 		CHANNEL0_DISABLE:  1-0,
 		CHANNEL1_DISABLE:  2-1,
 		CHANNEL2_DISABLE:  3-2, /* Bloomfield			*/
-		ReservedBits	:  4-3,
-		ECC_ENABLED	:  5-4; /* Bloomfield			*/
+		ReservedBits1	:  4-3,
+		ECC_ENABLED	:  5-4, /* Bloomfield			*/
+		ReservedBits2	: 32-5;
 	};
 } NHM_IMC_STATUS;
 
@@ -1730,8 +1748,8 @@ typedef union	/* Nehalem						*/
 		unsigned int
 		NUMCOL		:  2-0,
 		NUMROW		:  5-2,
-		NUMRANK		:  7-5,
-		NUMBANK		:  9-7,
+		NUMRANK 	:  7-5,
+		NUMBANK 	:  9-7,
 		DIMMPRESENT	: 10-9,
 		RANKOFFSET	: 13-10,
 		ReservedBits	: 32-13;
@@ -1751,15 +1769,23 @@ typedef union	/* Xeon C5500/C3500, Bloomfield, Lynnfield		*/
 } NHM_CURRENT_UCLK_RATIO;
 
 typedef union
-{ /* X58 IOH Control Status & RAS Registers: Dev: 20 - Func: 2 - Off: D0h */
+{
 	unsigned int		value;
-	struct {
+	struct {	/* IOH Control Status & RAS Registers		*/
+			/* @ Dev: 20 - Func: 2 - Off: D0h		*/
 		unsigned int
 		QPIFREQSEL	:  2-0,  /* 00=4800 GT/s, 10=6400 GT/s	*/
 		ReservedBits	: 31-2,
 		VT_d		: 32-31; /* Placeholder for VT-d: 0=Enable */
-	};
-} X58_QPI_FREQUENCY;
+	} X58;
+	struct {	/* Xeon E7 v2 & Xeon E5 v2			*/
+		unsigned int
+		QPIFREQSEL	:  3-0,  /*010=5600,011=6400,100=7200,101=8000*/
+		ReservedBits1	:  4-3,
+		Slow_Mode	:  5-4,
+		ReservedBits2	: 32-5;
+	} IVB_EP;
+} QPI_FREQUENCY;
 
 
 typedef union
@@ -1770,10 +1796,22 @@ typedef union
 		tRCD		:  4-0,
 		tRP		:  8-4,
 		tCL		: 12-8,
-		tCWL		: 16-12, /* IVB				*/
-		tRAS		: 24-16, /* IVB				*/
+		tCWL		: 16-12, /* IVB 			*/
+		tRAS		: 24-16, /* IVB 			*/
 		ReservedBits	: 32-24;
 	};
+	/* Device: 16,30 - Function: 0,1,4,5 - Offset 0200h		*/
+	struct {
+		unsigned int
+		tRCD		:  5-0,
+		tRP		:  9-5,
+		tCL		: 14-9,
+		tCWL		: 19-14,
+		tRAS		: 25-19,
+		cmd_oe_on	: 26-25,
+		cmd_oe_cs	: 27-26,
+		ReservedBits	: 32-27;
+	} EP;
 } SNB_IMC_TC_DBP;
 
 typedef union
@@ -1786,11 +1824,44 @@ typedef union
 		tCKE		: 12-8,
 		tWTPr		: 16-12,
 		tFAW		: 24-16,
-		tWR		: 29-24, /* IVB				*/
-		CMD_3ST		: 30-29, /* IVB				*/
+		tWR		: 29-24, /* IVB 			*/
+		CMD_3ST 	: 30-29, /* IVB 			*/
 		CMD_Stretch	: 32-30; /* IVB: 00 = 1N , 10 = 2N , 11 = 3N */
 	};
+	/* Device 16,30 - Function: 0,1,4,5 - Offset 204h		*/
+	struct {
+		unsigned int
+		tRRD		:  4-0,
+		tRTPr		:  8-4,
+		tCKE		: 12-8,
+		tWTPr		: 16-12,
+		tFAW		: 22-16,
+		T_PRPDEN	: 24-22,
+		tWR		: 29-24,
+		CMD_3ST 	: 30-29,
+		CMD_Stretch	: 32-30; /* 00=1N, 01=N/A, 10=2N, 11=3N */
+	} EP;
 } SNB_IMC_TC_RAP;
+
+typedef union
+{
+	unsigned int		value;
+	/* Device 16,30 - Function: 0,1,4,5 - Offset 208h		*/
+	struct {
+		unsigned int
+		tRRDR		:  3-0,
+		tRRDD		:  6-3,
+		tWWDR		:  9-6,
+		tWWDD		: 12-9,
+		tRWDR		: 15-12,
+		tRWDD		: 18-15,
+		tWRDR		: 21-18,
+		tWRDD		: 24-21,
+		tRWSR		: 27-24,
+		tCCD		: 30-27,
+		tWRDR_UPPER	: 32-30;
+	} EP;
+} SNB_IMC_TC_RWP;
 
 typedef union
 {	/* Device: 0 - Function: 0 - Offset Channel0: 4298h & Channel1: 4698h */
@@ -1801,6 +1872,13 @@ typedef union
 		tRFC		: 25-16,
 		tREFIx9 	: 32-25;
 	};
+	/* Device 16,30 - Function: 0,1,4,5 - Offset 214h		*/
+	struct {
+		unsigned int
+		tREFI		: 15-0,
+		tRFC		: 25-15,
+		tREFIx9 	: 32-25;
+	} EP;
 } SNB_IMC_TC_RFTP;
 
 typedef union
@@ -1824,7 +1902,7 @@ typedef union
 } SNB_IMC_MAD_CHANNEL;
 
 typedef union
-{	/* Device: 0 - Function: 0 - Offset E4h				*/
+{	/* Device: 0 - Function: 0 - Offset E4h 			*/
 	unsigned int		value;
 	struct {
 		unsigned int
@@ -1838,7 +1916,191 @@ typedef union
 } SNB_CAPID;	/* §2.5.33 CAPID0_A Capabilities A Register		*/
 
 typedef union
-{	/* Device: 0 - Function: 0 - Offset E8h				*/
+{	/* Device: 10 - Function: 3 - Offset: 84h			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		DE_SKTB2_UP	:  1-0,
+		DE_SKTB2_EN	:  2-1,
+		DE_SKTR_EP2S	:  3-2,
+		DE_SKTR_EP4S	:  4-3,
+		DE_SKTR1_EX	:  5-4,
+		CACHESIZE	:  8-5,
+		PRG_TDP_LIM_EN	:  9-8,
+		LLC_WAY_EN	: 12-9,
+		HT_DIS		: 13-12,
+		VT_CPAUSE_EN	: 14-13,
+		VT_REAL_MODE	: 15-14,
+		VT_X3_EN	: 16-15,
+		CORECONF_RES12	: 17-16,
+		VMX_DIS 	: 18-17,
+		SMX_DIS 	: 19-18,
+		LT_PRODUCTION	: 20-19,
+		LT_SX_EN	: 21-20,
+		LT_SMM_INHIBIT	: 22-21,
+		TSC_DEADLINE_DIS: 23-22,
+		AES_DIS 	: 24-23,
+		XSAVE_DIS	: 25-24,
+		XSAVEOPT_DIS	: 26-25,
+		GSSE256_DIS	: 27-26,
+		SLC64_DIS	: 28-27,
+		ART_DIS 	: 29-28,
+		PECI_EN 	: 30-29,
+		DCU_MODE	: 31-30,
+		PCLMULQ_DIS	: 32-31;
+	};
+} SNB_EP_CAPID0;
+
+typedef union
+{	/* Device: 10 - Function: 3 - Offset: 88h			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		DCA_EN		:  1-0,
+		CORE_RAS_EN	:  2-1,
+		PPPE_EN 	:  4-2,
+		GV3_DIS 	:  5-4,
+		PWRBITS_DIS	:  6-5,
+		CPU_HOT_ADD_EN	:  7-6,
+		X2APIC_EN	:  8-7,
+		ReservedBits1	:  9-8,
+		QOS_DIS 	: 10-9,
+		ReservedBits2	: 11-10,
+		SSKU_P1_RATIO	: 17-11,
+		SSKU_P0_RATIO	: 23-17,
+		MEM_PA_SIZE	: 26-23,
+		DMFC		: 30-26,
+		LT_SUPPORT_DIS	: 31-30,
+		MEM_MIRROR_DIS	: 32-31;
+	};
+} SNB_EP_CAPID1;
+
+typedef union
+{	/* Device: 10 - Function: 3 - Offset: 8Ch			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		PCIE_WS_DIS	:  1-0,
+		PCIEx16_DIS	:  3-1,
+		PCIE_XP_DIS	: 13-3,
+		PCIE_DMI_DIS	: 14-13,
+		PCIE_DMA_DIS	: 15-14,
+		PCIE_GEN3_DIS	: 16-15,
+		PCIE_LT_DIS	: 17-16,
+		PCIE_LTSX_DIS	: 18-17,
+		PCIE_RAID_DIS	: 19-18,
+		PCIE_NTB_DIS	: 20-19,
+		THERMAL_PROFILE : 22-20,
+		SPARE_SIGNED_FW : 23-22,
+		QPI_LINK0_DIS	: 24-23,
+		QPI_LINK1_DIS	: 25-24,
+		QPI_RATIO_DIS	: 30-25,
+		QPI_LINK2_DIS	: 31-30,
+		QPI_SPARE	: 32-31;
+	};
+} SNB_EP_CAPID2;
+
+typedef union
+{	/* Device: 10 - Function: 3 - Offset: 90h			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		CHANNEL_DIS	:  4-0,
+		DISABLE_2_DPC	:  5-4,
+		DISABLE_3_DPC	:  7-5,
+		DDR3_8GBIT_DIS	:  8-7,
+		DDR3_4GBIT_DIS	:  9-8,
+		QR_DIMM_DIS	: 10-9,
+		ECC_DIS 	: 11-10,
+		DIR_DIS 	: 12-11,
+		MODE_3N_DIS	: 13-12,
+		RDIMM_DIS	: 14-13,
+		UDIMM_DIS	: 15-14,
+		CLTT_DIS	: 16-15,
+		LOCKSTEP_DIS	: 17-16,
+		SPARING_DIS	: 18-17,
+		PATROL_SCRUB_DIS: 19-18,
+		EXT_LAT_DIMM_DIS: 20-19,
+		EXTADDR_DIMM_DIS: 21-20,
+		RAID_OR_ADDR_DIS: 22-21,
+		SMBUS_WRITE_DIS : 23-22,
+		MONROE_TECH_DIS : 24-23,
+		MC2GD		: 30-24,
+		MC_SPARE	: 32-30;
+	};
+} SNB_EP_CAPID3;
+
+typedef union
+{	/* Device: 10 - Function: 3 - Offset: 94h			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		LLC_SLICE_IACORE: 15-0,
+		ReservedBits1	: 19-15,
+		SPARE_FUSES	: 27-19,
+		TSC_RST_S3EXIT	: 28-27,
+		ReservedBits2	: 29-28,
+		I_TURBO_ENABLE	: 30-29,
+		DRAM_RAPL_DIS	: 31-30,
+		DRAM_POWER_DIS	: 32-31;
+	};
+} SNB_EP_CAPID4;
+
+typedef union
+{	/* Device: 15,29 - Function: 0 - Offset: 7Ch			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		CLOSE_PG	:  1-0,
+		LS_EN		:  2-1,
+		ECC_EN		:  3-2,
+		DIR_EN		:  4-3,
+		ReservedBits1	:  8-4,
+		Mode		:  9-8,
+		BANK_XOR_EN	: 10-9,
+		CPGC_IOSAV	: 12-10,
+		IMC_MODE	: 14-12,
+		ReservedBits2	: 16-14,
+		CHN_DISABLE	: 20-16,
+		ReservedBits3	: 32-20;
+	};
+} SNB_EP_MC_TECH;
+
+typedef union
+{	/* Device: 15,29 - Function: 0 - Offset: 80h, 84h ... A8h, ACh	*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		CH_TGT0 	:  2-0,
+		CH_TGT1 	:  4-2,
+		CH_TGT2 	:  6-4,
+		CH_TGT3 	:  8-6,
+		CH_WAY		: 10-8,
+		SKT_WAY 	: 12-10,
+		LIMIT		: 32-12;
+	};
+} SNB_EP_TADWAYNESS;
+
+typedef union
+{	/* Device: 15,29 - Function: 2,3,4,5 - Offset: 80h, 84h, 88h	*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		CA_WIDTH	:  2-0,
+		RA_WIDTH	:  5-2,
+		DDR3_DNSTY	:  7-5,
+		DDR3_WIDTH	:  9-7,
+		ReservedBits1	: 12-9,
+		RANK_CNT	: 14-12,
+		DIMM_POP	: 15-14,
+		ReservedBits2	: 16-15,
+		RANK_DISABLE	: 20-16,
+		ReservedBits3	: 32-20;
+	};
+} SNB_EP_DIMM_MTR;
+
+typedef union
+{	/* Device: 0 - Function: 0 - Offset E8h 			*/
 	unsigned int		value;
 	struct {
 		unsigned int
@@ -1851,12 +2113,11 @@ typedef union
 		PEGG3_DIS	: 21-20, /* PCIe Gen 3 Disable		*/
 		PLL_REF100_CFG	: 24-21, /* DDR3 Max. Freq. Capable @ 100MHz */
 		ReservedBits4	: 25-24,
-		CACHESZ		: 28-25, /* Cache Size Capability	*/
+		CACHESZ 	: 28-25, /* Cache Size Capability	*/
 		SMTCAP		: 29-28, /* SMT Capability		*/
 		ReservedBits5	: 32-29;
 	};
 } IVB_CAPID;	/* §2.5.39 CAPID0_B Capabilities B Register		*/
-
 
 typedef union
 {	/* Device: 0 - Function: 0 - Offset Channel0: 4C04h		*/

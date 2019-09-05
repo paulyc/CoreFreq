@@ -4,7 +4,42 @@
  * Licenses: GPL2
  */
 
-#define COREFREQ_VERSION	"1.57.1"
+#define COREFREQ_MAJOR	1
+#define COREFREQ_MINOR	65
+#define COREFREQ_REV	2
+
+#define COREFREQ_STRINGIFY(_number)	#_number
+
+#define COREFREQ_SERIALIZE(_major, _minor, _rev)			\
+	COREFREQ_STRINGIFY(_major)	"."				\
+	COREFREQ_STRINGIFY(_minor)	"."				\
+	COREFREQ_STRINGIFY(_rev)
+
+#define COREFREQ_VERSION	COREFREQ_SERIALIZE(	COREFREQ_MAJOR, \
+							COREFREQ_MINOR, \
+							COREFREQ_REV	)
+
+typedef struct {
+	unsigned short	major,
+			minor,
+			rev;
+} FOOTPRINT;
+
+#define SET_FOOTPRINT(_place, _major, _minor, _rev)			\
+({									\
+	_place.major	= _major;					\
+	_place.minor	= _minor;					\
+	_place.rev	= _rev ;					\
+})
+
+#define CHK_FOOTPRINT(_place, _major, _minor, _rev)			\
+(									\
+	(_place.major	== _major) &&					\
+	(_place.minor	== _minor) &&					\
+	(_place.rev	== _rev)					\
+)
+
+#define CORE_COUNT	256
 
 enum {	GenuineIntel,
 	Core_Yonah,
@@ -495,10 +530,10 @@ typedef struct
 		Model		:  8-4,
 		Family		: 12-8,
 		ProcType	: 14-12,
-		Unused1		: 16-14,
+		Unused1 	: 16-14,
 		ExtModel	: 20-16,
 		ExtFamily	: 28-20,
-		Unused2		: 32-28;
+		Unused2 	: 32-28;
 	    } EAX;
 		unsigned int Signature;
 	};
@@ -526,7 +561,7 @@ typedef struct
 		CNXT_ID : 11-10,
 		Unused1 : 12-11,
 		FMA	: 13-12,
-		CMPXCH16: 14-13,
+		CMPXCHG16:14-13,
 		xTPR	: 15-14,
 		PDCM	: 16-15,
 		Unused2 : 17-16,
@@ -557,7 +592,7 @@ typedef struct
 		MSR	:  6-5,
 		PAE	:  7-6,
 		MCE	:  8-7,
-		CMPXCH8 :  9-8,
+		CMPXCHG8:  9-8,
 		APIC	: 10-9,
 		Unused1 : 11-10,
 		SEP	: 12-11,
@@ -568,7 +603,7 @@ typedef struct
 		PAT	: 17-16,
 		PSE36	: 18-17,
 		PSN	: 19-18, /* Intel				*/
-		CLFSH	: 20-19,
+		CLFLUSH : 20-19,
 		Unused2 : 21-20,
 		DS_PEBS : 22-21,
 		ACPI	: 23-22,
@@ -1194,12 +1229,85 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA0
 	#define PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA0	0x0ea0
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA1
+	#define PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA1	0x0e60
+#endif
 /* Source: 3rd Generation Intel® Core™ Processor Family Vol2		*/
 #ifndef PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_SA
 	#define PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_SA	0x0150
 #endif
 #ifndef PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_0154
 	#define PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_0154	0x0154
+#endif
+/* Source: Intel Xeon Processor E5 & E7 v2 Datasheet Vol 2		*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_HOST_BRIDGE
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_HOST_BRIDGE	0x0e00
+#endif
+/*	QPIMISCSTAT							*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_QPI_LINK0
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_QPI_LINK0	0x0e80
+#endif
+/*	Integrated Memory Controller # : General and MemHot Registers	*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CPGC
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CPGC 0x0ea8
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CPGC
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CPGC 0x0e68
+#endif
+/*	Integrated Memory Controller # : Channel [m-M] Thermal Registers*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH0 0x0eb0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH1 0x0eb1
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH2 0x0eb2
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH3 0x0eb3
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH0 0x0eb4
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH1 0x0eb5
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH2 0x0eb6
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH3 0x0eb7
+#endif
+/*	Integrated Memory Controller 0 : Channel # TAD Registers	*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH0 0x0eaa
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH1 0x0eab
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH2 0x0eac
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH3 0x0ead
+#endif
+/*	Integrated Memory Controller 1 : Channel # TAD Registers	*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH0 0x0e6a
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH1 0x0e6b
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH2 0x0e6c
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH3 0x0e6d
+#endif
+/*	Power Control Unit						*/
+#ifndef PCI_DEVICE_ID_INTEL_IVB_EP_CAPABILITY
+	#define PCI_DEVICE_ID_INTEL_IVB_EP_CAPABILITY	0x0ec3
 #endif
 /* Source: 4th, 5th Generation Intel® Core™ Processor Family Vol2 §3.0	*/
 #ifndef PCI_DEVICE_ID_INTEL_HASWELL_IMC_HA0
@@ -1443,7 +1551,9 @@ typedef struct {
 				+ sizeof(unsigned int)			\
 				+ 4 * MAX_UTS_LEN )
 
-#define TASK_LIMIT		(((4096 << 5) - SYSGATE_STRUCT_SIZE)	\
+#define TASK_ORDER		6
+
+#define TASK_LIMIT		(((4096 << TASK_ORDER) - SYSGATE_STRUCT_SIZE) \
 				/ sizeof(TASK_MCB))
 
 /* Input-Output Control							*/
@@ -1651,25 +1761,79 @@ typedef struct {
 
 #define RING_WRITE( ... ) RING_WRITE_SUB_CMD( 0x0U, __VA_ARGS__ )
 
-typedef struct {
+enum SMB_STRING {
+	SMB_BIOS_VENDOR,
+	SMB_BIOS_VERSION,
+	SMB_BIOS_RELEASE,
+	SMB_SYSTEM_VENDOR,
+	SMB_PRODUCT_NAME,
+	SMB_PRODUCT_VERSION,
+	SMB_PRODUCT_SERIAL,
+	SMB_PRODUCT_SKU,
+	SMB_PRODUCT_FAMILY,
+	SMB_BOARD_NAME,
+	SMB_BOARD_VERSION,
+	SMB_BOARD_SERIAL,
+	SMB_STRING_COUNT
+};
+
+typedef union {
+		char String[SMB_STRING_COUNT][MAX_UTS_LEN];
 	struct {
-		char	Vendor[MAX_UTS_LEN],
-			Version[MAX_UTS_LEN],
-			Release[MAX_UTS_LEN];
-	} BIOS;
-	struct {
-		char	Vendor[MAX_UTS_LEN];
-	} System;
-	struct {
-		char	Name[MAX_UTS_LEN],
-			Version[MAX_UTS_LEN],
-			Serial[MAX_UTS_LEN],
-			SKU[MAX_UTS_LEN],
-			Family[MAX_UTS_LEN];
-	} Product;
-	struct {
-		char	Name[MAX_UTS_LEN],
-			Version[MAX_UTS_LEN],
-			Serial[MAX_UTS_LEN];
-	} Board;
+		struct {
+			char	Vendor[MAX_UTS_LEN],
+				Version[MAX_UTS_LEN],
+				Release[MAX_UTS_LEN];
+		} BIOS;
+		struct {
+			char	Vendor[MAX_UTS_LEN];
+		} System;
+		struct {
+			char	Name[MAX_UTS_LEN],
+				Version[MAX_UTS_LEN],
+				Serial[MAX_UTS_LEN],
+				SKU[MAX_UTS_LEN],
+				Family[MAX_UTS_LEN];
+		} Product;
+		struct {
+			char	Name[MAX_UTS_LEN],
+				Version[MAX_UTS_LEN],
+				Serial[MAX_UTS_LEN];
+		} Board;
+	};
 } SMBIOS_ST;
+
+#if defined(UBENCH) && UBENCH == 1
+#define UBENCH_DECLARE()						\
+static volatile unsigned long long uBenchCounter[3]			\
+					__attribute__ ((aligned(8))) = {\
+								0, 0, 0 \
+};									\
+inline static void UBENCH_RDCOUNTER_VOID(unsigned int idx) {}		\
+inline static void UBENCH_RDCOUNTER_INV(unsigned int idx)		\
+{									\
+	RDTSCP64(uBenchCounter[idx]);					\
+}									\
+inline static void UBENCH_RDCOUNTER_VAR(unsigned int idx)		\
+{									\
+	RDTSC64(uBenchCounter[idx]);					\
+}									\
+static void (*UBENCH_RDCOUNTER)(unsigned int) = UBENCH_RDCOUNTER_VOID;
+
+#define UBENCH_COMPUTE() (uBenchCounter[0] = uBenchCounter[2] - uBenchCounter[1])
+
+#define UBENCH_METRIC() (uBenchCounter[0])
+
+#define UBENCH_SETUP(architectureFlag)					\
+(									\
+	UBENCH_RDCOUNTER = ( architectureFlag ) ? UBENCH_RDCOUNTER_INV	\
+						: UBENCH_RDCOUNTER_VAR	\
+)
+#else
+#define UBENCH_DECLARE()	/* UBENCH_DECLARE() */
+#define UBENCH_RDCOUNTER(idx)	/* UBENCH_RDCOUNTER() */
+#define UBENCH_COMPUTE()	/* UBENCH_COMPUTE() */
+#define UBENCH_METRIC() 	/* UBENCH_METRIC() */
+#define UBENCH_SETUP(flag)	/* UBENCH_SETUP() */
+#endif /* UBENCH */
+
