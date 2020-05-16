@@ -1,6 +1,6 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
@@ -107,7 +107,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"",					\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -127,7 +127,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"",			\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -149,7 +149,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -176,7 +176,7 @@ __asm__ volatile							\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
 	  "%" #_reg4"",							\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -205,7 +205,7 @@ __asm__ volatile							\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
 	  "%" #_reg4"", "%" #_reg5"",					\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 #define ASM_COUNTERx5_STACK(_reg0, _reg1, _reg2, _reg3, 		\
@@ -236,7 +236,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -267,7 +267,7 @@ __asm__ volatile							\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
 	  "%" #_reg4"", "%" #_reg5"", "%" #_reg6"",			\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 #define ASM_COUNTERx6_STACK(_reg0, _reg1, _reg2, _reg3, 		\
@@ -302,7 +302,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 #define ASM_COUNTERx7(	_reg0, _reg1, _reg2, _reg3,			\
@@ -336,7 +336,7 @@ __asm__ volatile							\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"", "%" #_reg3"",	\
 	  "%" #_reg4"", "%" #_reg5"", "%" #_reg6"", "%" #_reg7"",	\
-	  "memory" \
+	  "cc", "memory"						\
 );
 
 #define ASM_COUNTERx7_STACK(_reg0, _reg1, _reg2,			\
@@ -378,7 +378,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"", "%" #_reg2"",			\
-	  "memory"							\
+	  "cc", "memory"						\
 );
 
 
@@ -487,11 +487,27 @@ ASM_COUNTERx7(r10, r11, r12, r13, r14, r15,r9,r8,ASM_RDTSCP,mem_tsc,__VA_ARGS__)
 	);								\
 })
 
-#define StrCopy(_dest, _src, _max)					\
+/* Source: Winbond W83627 datasheet					*/
+#define HWM_W83627_INDEX_PORT	0x295
+#define HWM_W83627_DATA_PORT	0x296
+#define HWM_W83627_CPUVCORE	0x20
+
+#define RDSIO(_data, _reg, _index_port, _data_port)			\
 ({									\
-	size_t _min = KMIN((_max - 1), strlen(_src));			\
-	memcpy(_dest, _src, _min);					\
-	_dest[_min] = '\0';						\
+	__asm__ volatile						\
+	(								\
+		"movw	%1,	%%ax"	"\n\t"				\
+		"movw	%2,	%%dx"	"\n\t"				\
+		"outw	%%ax,	%%dx"	"\n\t"				\
+		"movw	%3,	%%dx"	"\n\t"				\
+		"inb	%%dx,	%%al"	"\n\t"				\
+		"movb	%%al,	%0"					\
+		: "=m"	(_data) 					\
+		: "i"	(_reg) ,					\
+		  "i"	(_index_port),					\
+		  "i"	(_data_port)					\
+		: "%ax", "%dx", "memory"				\
+	);								\
 })
 
 typedef struct {
@@ -536,6 +552,9 @@ typedef struct
 
 typedef struct
 {
+#ifdef CONFIG_AMD_NB
+	struct pci_dev		*ZenIF_dev;
+#endif
 	struct kmem_cache	*Cache;
 	JOIN			*Join[];
 } KPRIVATE;
@@ -546,7 +565,7 @@ typedef struct
  * AMD64 Architecture Programmer’s Manual; Vol. 3
 */
 
-static const CPUID_STRUCT CpuIDforVendor[CPUID_MAX_FUNC]={
+static const CPUID_STRUCT CpuIDforVendor[CPUID_MAX_FUNC] = {
 /* x86 */
 	{.func=0x00000001, .sub=0x00000000},	/* Instruction set	*/
 /* Intel */
@@ -558,37 +577,46 @@ static const CPUID_STRUCT CpuIDforVendor[CPUID_MAX_FUNC]={
 	{.func=0x00000004, .sub=0x00000003},	/* Cache L3		*/
 /* x86 */
 	{.func=0x00000005, .sub=0x00000000},	/* MONITOR/MWAIT	*/
-	{.func=0x00000006, .sub=0x00000000},	/* Power & Thermal Mgmt	*/
+	{.func=0x00000006, .sub=0x00000000},	/* Power & Thermal Mgmt */
 	{.func=0x00000007, .sub=0x00000000},	/* Extended Features	*/
+	{.func=0x00000007, .sub=0x00000001},	/* Ext Feat. Sub-leaf 1 */
 /* Intel */
 	{.func=0x00000009, .sub=0x00000000},	/* Direct Cache Access	*/
 	{.func=0x0000000a, .sub=0x00000000},	/* Perf. Monitoring	*/
 /* x86 */
 	{.func=0x0000000b, .sub=0x00000000},	/* Ext. Topology	*/
-	{.func=0x0000000d, .sub=0x00000000},	/* Ext. State Main leaf	*/
+	{.func=0x0000000d, .sub=0x00000000},	/* Ext. State Main leaf */
 	{.func=0x0000000d, .sub=0x00000001},	/* Ext. State Sub-leaf	*/
 /* AMD */
 	{.func=0x0000000d, .sub=0x00000002},	/* Ext. State Sub-leaf	*/
+	{.func=0x0000000d, .sub=0x00000003},	/* BNDREGS state	*/
+	{.func=0x0000000d, .sub=0x00000004},	/* BNDCSR state 	*/
 /* AMD Family 15h */
 	{.func=0x0000000d, .sub=0x0000003e},	/* Ext. State Sub-leaf	*/
 /* Intel */
 	{.func=0x0000000f, .sub=0x00000000},	/* QoS Monitoring cap.	*/
 	{.func=0x0000000f, .sub=0x00000001},	/* L3 QoS Monitoring	*/
-	{.func=0x00000010, .sub=0x00000000},	/* QoS Enforcement cap.	*/
-	{.func=0x00000010, .sub=0x00000001},	/* L3 Alloc Enumeration	*/
-	{.func=0x00000010, .sub=0x00000002},	/* L2 Alloc Enumeration	*/
+	{.func=0x00000010, .sub=0x00000000},	/* QoS Enforcement cap. */
+	{.func=0x00000010, .sub=0x00000001},	/* L3 Alloc Enumeration */
+	{.func=0x00000010, .sub=0x00000002},	/* L2 Alloc Enumeration */
 	{.func=0x00000010, .sub=0x00000003},	/* RAM Bandwidth Enum.	*/
 	{.func=0x00000012, .sub=0x00000000},	/* SGX Capability	*/
 	{.func=0x00000012, .sub=0x00000001},	/* SGX Attributes	*/
-	{.func=0x00000012, .sub=0x00000002},	/* SGX EnclavePageCache	*/
+	{.func=0x00000012, .sub=0x00000002},	/* SGX EnclavePageCache */
 	{.func=0x00000014, .sub=0x00000000},	/* Processor Trace	*/
-	{.func=0x00000014, .sub=0x00000001},	/* Proc. Trace Sub-leaf	*/
+	{.func=0x00000014, .sub=0x00000001},	/* Proc. Trace Sub-leaf */
 	{.func=0x00000015, .sub=0x00000000},	/* Time Stamp Counter	*/
 	{.func=0x00000016, .sub=0x00000000},	/* Processor Frequency	*/
 	{.func=0x00000017, .sub=0x00000000},	/* System-On-Chip	*/
-	{.func=0x00000017, .sub=0x00000001},	/* SOC Attrib. Sub-leaf	*/
-	{.func=0x00000017, .sub=0x00000002},	/* SOC Attrib. Sub-leaf	*/
-	{.func=0x00000017, .sub=0x00000003},	/* SOC Attrib. Sub-leaf	*/
+	{.func=0x00000017, .sub=0x00000001},	/* SOC Attrib. Sub-leaf1*/
+	{.func=0x00000017, .sub=0x00000002},	/* SOC Attrib. Sub-leaf2*/
+	{.func=0x00000017, .sub=0x00000003},	/* SOC Attrib. Sub-leaf3*/
+/* Intel */
+	{.func=0x00000018, .sub=0x00000000},	/* Address Translation	*/
+	{.func=0x00000018, .sub=0x00000001},	/* DAT Sub-leaf 1	*/
+	{.func=0x0000001a, .sub=0x00000000},	/* Hybrid Information	*/
+	{.func=0x0000001b, .sub=0x00000000},	/* PCONFIG Information	*/
+	{.func=0x0000001f, .sub=0x00000000},	/* Ext. Topology V2	*/
 /* x86 */
 	{.func=0x80000001, .sub=0x00000000},	/* Extended Features	*/
 	{.func=0x80000002, .sub=0x00000000},	/* Processor Name Id.	*/
@@ -604,22 +632,21 @@ static const CPUID_STRUCT CpuIDforVendor[CPUID_MAX_FUNC]={
 	{.func=0x8000000a, .sub=0x00000000},	/* SVM Revision		*/
 	{.func=0x80000019, .sub=0x00000000},	/* Caches & TLB 1G	*/
 	{.func=0x8000001a, .sub=0x00000000},	/* Perf. Optimization	*/
-	{.func=0x8000001b, .sub=0x00000000},	/* Inst. Based Sampling	*/
+	{.func=0x8000001b, .sub=0x00000000},	/* Inst. Based Sampling */
 	{.func=0x8000001c, .sub=0x00000000},	/* Lightweight Profiling*/
-	{.func=0x8000001d, .sub=0x00000000},	/* Cache L1D Properties	*/
-	{.func=0x8000001d, .sub=0x00000001},	/* Cache L1I Properties	*/
+	{.func=0x8000001d, .sub=0x00000000},	/* Cache L1D Properties */
+	{.func=0x8000001d, .sub=0x00000001},	/* Cache L1I Properties */
 	{.func=0x8000001d, .sub=0x00000002},	/* Cache L2 Properties	*/
-	{.func=0x8000001d, .sub=0x00000003},	/* Cache Properties End	*/
-	{.func=0x8000001e, .sub=0x00000000},	/* Extended Identifiers	*/
+	{.func=0x8000001d, .sub=0x00000003},	/* Cache Properties End */
+	{.func=0x8000001e, .sub=0x00000000},	/* Extended Identifiers */
 /* x86 */
 	{.func=0x40000000, .sub=0x00000000},	/* Hypervisor vendor	*/
-	{.func=0x40000001, .sub=0x00000000},	/* Hypervisor interface	*/
+	{.func=0x40000001, .sub=0x00000000},	/* Hypervisor interface */
 	{.func=0x40000002, .sub=0x00000000},	/* Hypervisor version	*/
 	{.func=0x40000003, .sub=0x00000000},	/* Hypervisor features	*/
-	{.func=0x40000004, .sub=0x00000000},	/* Hyperv. requirements	*/
+	{.func=0x40000004, .sub=0x00000000},	/* Hyperv. requirements */
 	{.func=0x40000005, .sub=0x00000000},	/* Hypervisor limits	*/
 	{.func=0x40000006, .sub=0x00000000},	/* Hypervisor exploits	*/
-	{.func=0x00000000, .sub=0x00000000},
 };
 
 #define LATCH_NONE		0b0000
@@ -633,7 +660,7 @@ typedef struct {
 } MICRO_ARCH;
 
 typedef struct {
-	char			*BrandSubStr;
+	char			**Brand;
 	unsigned int		Boost[2];
 	THERMAL_PARAM		Param;
 	unsigned short		CodeNameIdx	:  8-0,
@@ -655,6 +682,7 @@ typedef struct {
 typedef struct {
 	IDLE_STATE		*IdleState;
 	unsigned int		(*GetFreq)(unsigned int cpu);
+	void			(*SetTarget)(void *arg);
 } SYSTEM_DRIVER;
 
 typedef struct
@@ -878,6 +906,18 @@ extern void InitTimer_AMD_Family_17h(unsigned int cpu) ;
 #define _Atom_Moorefield \
 			{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x5, .Model=0xA}
 
+/*	[C3000] 	06_5Fh Stepping 0={A0,A1} 1={B0,B1}		*/
+#define _Atom_C3000	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x5, .Model=0xF}
+
+/*	[Tremont]	06_86h
+	[Lakefield, Snow Ridge, Jacobsville, Elkhart Lake, Jasper Lake] */
+#define _Atom_Tremont	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x8, .Model=0x6}
+
+/*	[Tremont]	06_96h
+	[Elkhart Lake]							*/
+#define _Atom_Tremont_EHL \
+			{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x9, .Model=0x6}
+
 /*	[Nehalem]	06_1Ah, 06_1Eh, 06_1Fh, 06_2Eh			*/
 #define _Nehalem_Bloomfield \
 			{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x1, .Model=0xA}
@@ -914,24 +954,49 @@ extern void InitTimer_AMD_Family_17h(unsigned int cpu) ;
 /*	[Skylake]	06_4Eh, 06_5Eh, 06_55h				*/
 #define _Skylake_UY	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x4, .Model=0xE}
 #define _Skylake_S	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x5, .Model=0xE}
+/*	[Skylake]	06_55h Stepping 4
+	[Cascade Lake]	06_55h Stepping 7				*/
 #define _Skylake_X	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x5, .Model=0x5}
 
 /*	[Xeon Phi]	06_57h, 06_85h					*/
 #define _Xeon_Phi	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x5, .Model=0x7}
 
-/*	[Kaby Lake]	06_8Eh Stepping 9, 06_9Eh,
-	[Whiskey Lake]	06_8Eh Stepping 11				*/
+/*	[Kaby Lake]	06_9Eh Stepping 9
+	[Coffee Lake]	06_9Eh Stepping 10 and 11			*/
 #define _Kabylake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x9, .Model=0xE}
+/*	[Kaby Lake/UY]	06_8Eh Stepping 9
+	[Whiskey Lake/U] 06_8Eh Stepping 11
+	[Amber Lake/Y]	06_8Eh Stepping 9
+	[Comet Lake/U]	06_8Eh Stepping 12				*/
 #define _Kabylake_UY	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x8, .Model=0xE}
 
 /*	[Cannon Lake]	06_66h						*/
 #define _Cannonlake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x6, .Model=0x6}
 
-/*	[Geminilake]	06_7Ah						*/
+/*	[Gemini Lake]	06_7Ah						*/
 #define _Geminilake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x7, .Model=0xA}
 
-/*	[Ice Lake]	06_7Eh						*/
+/*	[Ice Lake]	06_7Dh
+	[Ice Lake/UY]	06_7Eh
+	[Ice Lake/X]	06_6Ah
+	[Ice Lake/D]	06_6Ch						*/
+#define _Icelake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x7, .Model=0xD}
 #define _Icelake_UY	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x7, .Model=0xE}
+#define _Icelake_X	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x6, .Model=0xA}
+#define _Icelake_D	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x6, .Model=0xC}
+
+/*	[Sunny Cove]	06_9Dh						*/
+#define _Sunny_Cove	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x9, .Model=0xD}
+
+/*	[Tiger Lake]	06_8D
+	[Tiger Lake/U]	06_8C						*/
+#define _Tigerlake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x8, .Model=0xD}
+#define _Tigerlake_U	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0x8, .Model=0xC}
+
+/*	[Comet Lake]	06_A5
+	[Comet Lake/UL]	06_A6						*/
+#define _Cometlake	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0xA, .Model=0x5}
+#define _Cometlake_UY	{.ExtFamily=0x0, .Family=0x6, .ExtModel=0xA, .Model=0x6}
 
 /*	[Family 0Fh]	0F_00h						*/
 #define _AMD_Family_0Fh {.ExtFamily=0x0, .Family=0xF, .ExtModel=0x0, .Model=0x0}
@@ -956,6 +1021,9 @@ extern void InitTimer_AMD_Family_17h(unsigned int cpu) ;
 
 /*	[Family 17h]	8F_00h						*/
 #define _AMD_Family_17h {.ExtFamily=0x8, .Family=0xF, .ExtModel=0x0, .Model=0x0}
+
+/*	[Family 18h]	9F_00h						*/
+#define _AMD_Family_18h {.ExtFamily=0x9, .Family=0xF, .ExtModel=0x0, .Model=0x0}
 
 
 typedef kernel_ulong_t (*PCI_CALLBACK)(struct pci_dev *);
@@ -999,6 +1067,9 @@ static PCI_CALLBACK HSW_IMC(struct pci_dev *dev) ;
 static PCI_CALLBACK SKL_IMC(struct pci_dev *dev) ;
 static PCI_CALLBACK AMD_0Fh_MCH(struct pci_dev *dev) ;
 static PCI_CALLBACK AMD_0Fh_HTT(struct pci_dev *dev) ;
+#ifdef CONFIG_AMD_NB
+static PCI_CALLBACK AMD_17h_ZenIF(struct pci_dev *dev) ;
+#endif
 /* TODO:
 static PCI_CALLBACK SKL_SA(struct pci_dev *dev) ;
 static PCI_CALLBACK AMD_IOMMU(struct pci_dev *dev) ;
@@ -1123,6 +1194,10 @@ static struct pci_device_id PCI_Nehalem_DMI_ids[] = {
 	},
 	{ /* Lynnfield QuickPath Architecture Generic Non-core Registers */
 	PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_LYNNFIELD_NON_CORE),
+		.driver_data = (kernel_ulong_t) NHM_NON_CORE
+	},
+	{ /* Clarksfield Processor Uncore Device 0, Function 0		*/
+      PCI_DEVICE(PCI_VENDOR_ID_INTEL,PCI_DEVICE_ID_INTEL_CLARKSFIELD_NON_CORE),
 		.driver_data = (kernel_ulong_t) NHM_NON_CORE
 	},
 	{ /* Westmere/Clarkdale QuickPath Architecture Non-core Registers */
@@ -1296,6 +1371,14 @@ static struct pci_device_id PCI_Haswell_ids[] = {
 	    PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HASWELL_IMC_SA),
 		.driver_data = (kernel_ulong_t) HSW_IMC
 	},
+	{	/* Mobile M/H: Host Agent=0x0c04			*/
+	PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HASWELL_MH_IMC_HA0),
+		.driver_data = (kernel_ulong_t) HSW_IMC
+	},
+	{	/* Mobile U/Y: Host Agent=0x0a04			*/
+	PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HASWELL_UY_IMC_HA0),
+		.driver_data = (kernel_ulong_t) HSW_IMC
+	},
 	{0, }
 };
 
@@ -1304,6 +1387,10 @@ static struct pci_device_id PCI_Haswell_ids[] = {
 static struct pci_device_id PCI_Broadwell_ids[] = {
 	{
 	  PCI_DEVICE(PCI_VENDOR_ID_INTEL,PCI_DEVICE_ID_INTEL_BROADWELL_IMC_HA0),
+		.driver_data = (kernel_ulong_t) HSW_IMC
+	},
+	{
+	PCI_DEVICE(PCI_VENDOR_ID_INTEL,PCI_DEVICE_ID_INTEL_BROADWELL_D_IMC_HA0),
 		.driver_data = (kernel_ulong_t) HSW_IMC
 	},
 	{
@@ -1473,16 +1560,56 @@ static struct pci_device_id PCI_AMD_0Fh_ids[] = {
 };
 
 /* AMD Family 17h							*/
+#ifdef CONFIG_AMD_NB
+static struct pci_device_id PCI_AMD_17h_ids[] = {
+	/* Source: /drivers/hwmon/k10temp.c				*/
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_ZEPPELIN_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_RAVEN_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_MATISSE_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_STARSHIP_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_RENOIR_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_ARIEL_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_FIREFLIGHT_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{
+		PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_17H_ARDEN_DF_F3),
+		.driver_data = (kernel_ulong_t) AMD_17h_ZenIF
+	},
+	{0, }
+};
+#else
 static struct pci_device_id PCI_AMD_17h_ids[] = {
 	{0, }
 };
+#endif /* CONFIG_AMD_NB */
 
 
 static MICRO_ARCH Arch_Void[] = {{NULL}};
-static MICRO_ARCH Arch_Core_Yonah[] = {{"Core/Yonah"}, {NULL}};
-static MICRO_ARCH Arch_Core_Conroe[] = {{"Core2/Conroe/Merom"}, {NULL}};
-static MICRO_ARCH Arch_Core_Kentsfield[] = {{"Core2/Kentsfield"}, {NULL}};
-static MICRO_ARCH Arch_Core_Conroe_616[] = {{"Core2/Conroe/Yonah"}, {NULL}};
+
+static MICRO_ARCH Arch_Core_Yonah[]	= {{"Core/Yonah"}	, {NULL}};
+static MICRO_ARCH Arch_Core_Conroe[]	= {{"Core2/Conroe/Merom"},{NULL}};
+static MICRO_ARCH Arch_Core_Kentsfield[]= {{"Core2/Kentsfield"} , {NULL}};
+static MICRO_ARCH Arch_Core_Conroe_616[]= {{"Core2/Conroe/Yonah"},{NULL}};
 
 enum {
 	CN_PENRYN,
@@ -1497,24 +1624,35 @@ static MICRO_ARCH Arch_Core_Penryn[] = {
 	{NULL}
 };
 
-static MICRO_ARCH Arch_Core_Dunnington[] = {{"Xeon/Dunnington"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Bonnell[] = {{"Atom/Bonnell"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Silvermont[] = {{"Atom/Silvermont"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Lincroft[] = {{"Atom/Lincroft"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Clovertrail[] = {{"Atom/Clovertrail"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Saltwell[] = {{"Atom/Saltwell"}, {NULL}};
-static MICRO_ARCH Arch_Silvermont_637[] = {{"Silvermont"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Avoton[] = {{"Atom/Avoton"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Airmont[] = {{"Atom/Airmont"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Goldmont[] = {{"Atom/Goldmont"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Sofia[] = {{"Atom/Sofia"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Merrifield[] = {{"Atom/Merrifield"}, {NULL}};
-static MICRO_ARCH Arch_Atom_Moorefield[] = {{"Atom/Moorefield"}, {NULL}};
-static MICRO_ARCH Arch_Nehalem_Bloomfield[] = {{"Nehalem/Bloomfield"}, {NULL}};
-static MICRO_ARCH Arch_Nehalem_Lynnfield[] = {{"Nehalem/Lynnfield"}, {NULL}};
-static MICRO_ARCH Arch_Nehalem_MB[] = {{"Nehalem/Mobile"}, {NULL}};
-static MICRO_ARCH Arch_Nehalem_EX[] = {{"Nehalem/eXtreme.EP"}, {NULL}};
-static MICRO_ARCH Arch_Westmere[] = {{"Westmere"}, {NULL}};
+static MICRO_ARCH Arch_Core_Dunnington[]= {{"Xeon/Dunnington"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Bonnell[]	= {{"Atom/Bonnell"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Silvermont[]= {{"Atom/Silvermont"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Lincroft[]	= {{"Atom/Lincroft"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Clovertrail[]={{"Atom/Clovertrail"} , {NULL}};
+static MICRO_ARCH Arch_Atom_Saltwell[]	= {{"Atom/Saltwell"}	, {NULL}};
+static MICRO_ARCH Arch_Silvermont_637[] = {{"Silvermont"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Avoton[]	= {{"Atom/Avoton"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Airmont[]	= {{"Atom/Airmont"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Goldmont[]	= {{"Atom/Goldmont"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Sofia[]	= {{"Atom/Sofia"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Merrifield[]= {{"Atom/Merrifield"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Moorefield[]= {{"Atom/Moorefield"}	, {NULL}};
+static MICRO_ARCH Arch_Nehalem_Bloomfield[]={{"Nehalem/Bloomfield"},{NULL}};
+
+enum {
+	CN_LYNNFIELD,
+	CN_CLARKSFIELD
+};
+
+static MICRO_ARCH Arch_Nehalem_Lynnfield[] = {
+	[CN_LYNNFIELD]		= {"Nehalem/Lynnfield"},
+	[CN_CLARKSFIELD]	= {"Nehalem/Clarksfield"},
+	{NULL}
+};
+
+static MICRO_ARCH Arch_Nehalem_MB[]	= {{"Nehalem/Mobile"}	, {NULL}};
+static MICRO_ARCH Arch_Nehalem_EX[]	= {{"Nehalem/eXtreme.EP"},{NULL}};
+static MICRO_ARCH Arch_Westmere[]	= {{"Westmere"} 	, {NULL}};
 
 enum {
 	CN_WESTMERE_EP,
@@ -1527,43 +1665,121 @@ static MICRO_ARCH Arch_Westmere_EP[] = {
 	{NULL}
 };
 
-static MICRO_ARCH Arch_Westmere_EX[] = {{"Westmere/eXtreme"}, {NULL}};
-static MICRO_ARCH Arch_SandyBridge[] = {{"SandyBridge"}, {NULL}};
-static MICRO_ARCH Arch_SandyBridge_EP[] = {{"SandyBridge/eXtreme.EP"}, {NULL}};
-static MICRO_ARCH Arch_IvyBridge[] = {{"IvyBridge"}, {NULL}};
-static MICRO_ARCH Arch_IvyBridge_EP[] = {{"IvyBridge/EP"}, {NULL}};
-static MICRO_ARCH Arch_Haswell_DT[] = {{"Haswell/Desktop"}, {NULL}};
-static MICRO_ARCH Arch_Haswell_EP[] = {{"Haswell/EP/Mobile"}, {NULL}};
-static MICRO_ARCH Arch_Haswell_ULT[] = {{"Haswell/Ultra Low TDP"}, {NULL}};
-static MICRO_ARCH Arch_Haswell_ULX[] = {{"Haswell/Ultra Low eXtreme"}, {NULL}};
-static MICRO_ARCH Arch_Broadwell[] = {{"Broadwell/Mobile"}, {NULL}};
-static MICRO_ARCH Arch_Broadwell_D[] = {{"Broadwell/D"}, {NULL}};
-static MICRO_ARCH Arch_Broadwell_H[] = {{"Broadwell/H"}, {NULL}};
-static MICRO_ARCH Arch_Broadwell_EP[] = {{"Broadwell/EP/EX"}, {NULL}};
-static MICRO_ARCH Arch_Skylake_UY[] = {{"Skylake/UY"}, {NULL}};
-static MICRO_ARCH Arch_Skylake_S[] = {{"Skylake/S"}, {NULL}};
-static MICRO_ARCH Arch_Skylake_X[] = {{"Skylake/X"}, {NULL}};
+static MICRO_ARCH Arch_Westmere_EX[]	= {{"Westmere/eXtreme"} , {NULL}};
+static MICRO_ARCH Arch_SandyBridge[]	= {{"SandyBridge"}	, {NULL}};
+static MICRO_ARCH Arch_SandyBridge_EP[] = {{"SandyBridge/eXtreme.EP"},{NULL}};
+static MICRO_ARCH Arch_IvyBridge[]	= {{"IvyBridge"}	, {NULL}};
+static MICRO_ARCH Arch_IvyBridge_EP[]	= {{"IvyBridge/EP"}	, {NULL}};
+
+enum {
+	CN_HASWELL_DESKTOP,
+	CN_HASWELL_MOBILE_EX,
+	CN_HASWELL_CRYSTALWELL,
+	CN_HASWELL_CANYON,
+	CN_HASWELL_DENLOW,
+	CN_HASWELL_EMBEDDED,
+	CN_HASWELL_MOBILE
+};
+
+static MICRO_ARCH Arch_Haswell_DT[] = {
+	[CN_HASWELL_DESKTOP]	= {"Haswell/Desktop"},
+	[CN_HASWELL_MOBILE_EX]	= {"Haswell/Mobile/eXtreme"},
+	[CN_HASWELL_CRYSTALWELL]= {"Haswell/Crystal Well"},
+	[CN_HASWELL_CANYON]	= {"Haswell/Canyon"},
+	[CN_HASWELL_DENLOW]	= {"Haswell/Denlow"},
+	[CN_HASWELL_EMBEDDED]	= {"Haswell/Embedded"},
+	[CN_HASWELL_MOBILE]	= {"Haswell/Mobile"},
+	{NULL}
+};
+
+static MICRO_ARCH Arch_Haswell_EP[]	= {{"Haswell/EP/Mobile"}, {NULL}};
+static MICRO_ARCH Arch_Haswell_ULT[]	= {{"Haswell/Ultra Low TDP"},{NULL}};
+static MICRO_ARCH Arch_Haswell_ULX[]	={{"Haswell/Ultra Low eXtreme"},{NULL}};
+static MICRO_ARCH Arch_Broadwell[]	= {{"Broadwell/Mobile"} , {NULL}};
+static MICRO_ARCH Arch_Broadwell_D[]	= {{"Broadwell/D"}	, {NULL}};
+static MICRO_ARCH Arch_Broadwell_H[]	= {{"Broadwell/H"}	, {NULL}};
+static MICRO_ARCH Arch_Broadwell_EP[]	= {{"Broadwell/EP/EX"}	, {NULL}};
+static MICRO_ARCH Arch_Skylake_UY[]	= {{"Skylake/UY"}	, {NULL}};
+static MICRO_ARCH Arch_Skylake_S[]	= {{"Skylake/S"}	, {NULL}};
+
+enum {
+	CN_SKYLAKE_X,
+	CN_CASCADELAKE_X
+};
+
+static MICRO_ARCH Arch_Skylake_X[] = {
+	[CN_SKYLAKE_X]		= {"Skylake/X"},
+	[CN_CASCADELAKE_X]	= {"Cascade Lake/X"},
+	{NULL}
+};
+
 static MICRO_ARCH Arch_Xeon_Phi[] = {{"Knights Landing"}, {NULL}};
 
 enum {
 	CN_KABYLAKE,
 	CN_KABYLAKE_S,
+	CN_KABYLAKE_X,
+	CN_KABYLAKE_H,
+	CN_KABYLAKE_U,
+	CN_KABYLAKE_Y,
+	CN_KABYLAKE_R,
+	CN_KABYLAKE_G,
 	CN_COFFEELAKE_S,
-	CN_COFFEELAKE_R
+	CN_COFFEELAKE_H,
+	CN_COFFEELAKE_U,
+	CN_COFFEELAKE_R,
+	CN_COFFEELAKE_HR
 };
 
 static MICRO_ARCH Arch_Kabylake[] = {
 	[CN_KABYLAKE]		= {"Kaby Lake"},
 	[CN_KABYLAKE_S] 	= {"Kaby Lake/S"},
+	[CN_KABYLAKE_X] 	= {"Kaby Lake/X"},
+	[CN_KABYLAKE_H] 	= {"Kaby Lake/H"},
+	[CN_KABYLAKE_U] 	= {"Kaby Lake/U"},
+	[CN_KABYLAKE_Y] 	= {"Kaby Lake/Y"},
+	[CN_KABYLAKE_R] 	= {"Kaby Lake/R"},
+	[CN_KABYLAKE_G] 	= {"Kaby Lake/G"},
 	[CN_COFFEELAKE_S]	= {"Coffee Lake/S"},
+	[CN_COFFEELAKE_H]	= {"Coffee Lake/H"},
+	[CN_COFFEELAKE_U]	= {"Coffee Lake/U"},
 	[CN_COFFEELAKE_R]	= {"Coffee Lake/R"},
+	[CN_COFFEELAKE_HR]	= {"Coffee Lake/HR"},
 	{NULL}
 };
 
-static MICRO_ARCH Arch_Kabylake_UY[] = {{"Kaby Lake/UY"}, {NULL}};
-static MICRO_ARCH Arch_Cannonlake[] = {{"Cannon Lake"}, {NULL}};
-static MICRO_ARCH Arch_Geminilake[] = {{"Atom/Gemini Lake"}, {NULL}};
-static MICRO_ARCH Arch_Icelake_UY[] = {{"Ice Lake/UY"}, {NULL}};
+enum {
+	CN_KABYLAKE_UY,
+	CN_WHISKEYLAKE_U,
+	CN_AMBERLAKE_Y,
+	CN_COMETLAKE_H,
+	CN_COMETLAKE_U
+};
+
+static MICRO_ARCH Arch_Kabylake_UY[] = {
+	[CN_KABYLAKE_UY]	= {"Kaby Lake/UY"},
+	[CN_WHISKEYLAKE_U]	= {"Whiskey Lake/U"},
+	[CN_AMBERLAKE_Y]	= {"Amber Lake/Y"},
+	[CN_COMETLAKE_H]	= {"Comet Lake/H"},
+	[CN_COMETLAKE_U]	= {"Comet Lake/U"},
+	{NULL}
+};
+
+static MICRO_ARCH Arch_Cannonlake[]	= {{"Cannon Lake"}	, {NULL}};
+static MICRO_ARCH Arch_Geminilake[]	= {{"Atom/Gemini Lake"} , {NULL}};
+static MICRO_ARCH Arch_Icelake[]	= {{"Ice Lake"} 	, {NULL}};
+static MICRO_ARCH Arch_Icelake_UY[]	= {{"Ice Lake/UY"}	, {NULL}};
+static MICRO_ARCH Arch_Icelake_X[]	= {{"Ice Lake/X"}	, {NULL}};
+static MICRO_ARCH Arch_Icelake_D[]	= {{"Ice Lake/D"}	, {NULL}};
+static MICRO_ARCH Arch_Sunny_Cove[]	= {{"Sunny Cove"}	, {NULL}};
+static MICRO_ARCH Arch_Tigerlake[]	= {{"Tiger Lake"}	, {NULL}};
+static MICRO_ARCH Arch_Tigerlake_U[]	= {{"Tiger Lake/U"}	, {NULL}};
+static MICRO_ARCH Arch_Cometlake[]	= {{"Comet Lake"}	, {NULL}};
+static MICRO_ARCH Arch_Cometlake_UY[]	= {{"Comet Lake/UY"}	, {NULL}};
+
+static MICRO_ARCH Arch_Atom_C3000[]	= {{"Atom/C3000"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Tremont[]	= {{"Atom/Tremont"}	, {NULL}};
+static MICRO_ARCH Arch_Atom_Tremont_EHL[]={{"Atom/Tremont/EHL"}	, {NULL}};
 
 enum {
 	CN_BULLDOZER,
@@ -1572,11 +1788,11 @@ enum {
 	CN_EXCAVATOR
 };
 
-static MICRO_ARCH Arch_AMD_Family_0Fh[] = {{"Hammer"}, {NULL}};
-static MICRO_ARCH Arch_AMD_Family_10h[] = {{"K10"}, {NULL}};
-static MICRO_ARCH Arch_AMD_Family_11h[] = {{"Turion"}, {NULL}};
-static MICRO_ARCH Arch_AMD_Family_12h[] = {{"Fusion"}, {NULL}};
-static MICRO_ARCH Arch_AMD_Family_14h[] = {{"Bobcat"}, {NULL}};
+static MICRO_ARCH Arch_AMD_Family_0Fh[] = {{"Hammer"}	, {NULL}};
+static MICRO_ARCH Arch_AMD_Family_10h[] = {{"K10"}	, {NULL}};
+static MICRO_ARCH Arch_AMD_Family_11h[] = {{"Turion"}	, {NULL}};
+static MICRO_ARCH Arch_AMD_Family_12h[] = {{"Fusion"}	, {NULL}};
+static MICRO_ARCH Arch_AMD_Family_14h[] = {{"Bobcat"}	, {NULL}};
 static MICRO_ARCH Arch_AMD_Family_15h[] = {
 	[CN_BULLDOZER]		= {"Bulldozer"},
 	[CN_PILEDRIVER] 	= {"Bulldozer/Piledriver"},
@@ -1587,29 +1803,39 @@ static MICRO_ARCH Arch_AMD_Family_15h[] = {
 static MICRO_ARCH Arch_AMD_Family_16h[] = {{"Jaguar"}, {NULL}};
 
 enum {
+	CN_WHITEHAVEN,
 	CN_SUMMIT_RIDGE,
 	CN_RAVEN_RIDGE,
-	CN_PINNACLE_RIDGE,
-	CN_MATISSE,
-	CN_WHITEHAVEN,
 	CN_COLFAX,
-	CN_NAPLES
+	CN_PINNACLE_RIDGE,
+	CN_PICASSO,
+	CN_CASTLE_PEAK,
+	CN_MATISSE,
+	CN_RENOIR,
+	CN_NAPLES,
+	CN_ROME,
 };
 
 static MICRO_ARCH Arch_AMD_Family_17h[] = {
+	[CN_WHITEHAVEN] 	= {"Zen/Whitehaven"},
 	[CN_SUMMIT_RIDGE]	= {"Zen/Summit Ridge"},
 	[CN_RAVEN_RIDGE]	= {"Zen/Raven Ridge"},
-	[CN_PINNACLE_RIDGE]	= {"Zen+ Pinnacle Ridge"},
-	[CN_MATISSE]		= {"Zen2/Matisse"},
-	[CN_WHITEHAVEN] 	= {"Zen/Whitehaven"},
 	[CN_COLFAX]		= {"Zen+ Colfax"},
+	[CN_PINNACLE_RIDGE]	= {"Zen+ Pinnacle Ridge"},
+	[CN_PICASSO]		= {"Zen+ Picasso"},
+	[CN_CASTLE_PEAK]	= {"Zen2/Castle Peak"},
+	[CN_MATISSE]		= {"Zen2/Matisse"},
+	[CN_RENOIR]		= {"Zen2/Renoir"},
 	[CN_NAPLES]		= {"EPYC/Naples"},
+	[CN_ROME]		= {"EPYC/Rome"},
 	{NULL}
 };
 
+static MICRO_ARCH Arch_AMD_Family_18h[] = {{"Dhyana"}, {NULL}};
+
 static PROCESSOR_SPECIFIC Void_Specific[] = {
 	{
-	.BrandSubStr = NULL,
+	.Brand = NULL,
 	.Boost = {0, 0},
 	.Param = {0, .Offset = { 0, 0}},
 	.CodeNameIdx = 0,
@@ -1635,62 +1861,12 @@ static PROCESSOR_SPECIFIC Core_Penryn_Specific[] = {
 		''		"Intel(R) Core(TM)2 Extreme CPU X9775"
 */
 	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Quad CPU Q84",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_YORKFIELD,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Quad CPU Q94",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_YORKFIELD,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Quad CPU Q95",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_YORKFIELD,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Quad CPU Q96",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_YORKFIELD,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Extreme CPU X96",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_YORKFIELD,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Extreme CPU X97",
+	.Brand = ZLIST( "Intel(R) Core(TM)2 Extreme CPU X97",	\
+			"Intel(R) Core(TM)2 Extreme CPU X96",	\
+			"Intel(R) Core(TM)2 Quad CPU Q96",	\
+			"Intel(R) Core(TM)2 Quad CPU Q95",	\
+			"Intel(R) Core(TM)2 Quad CPU Q94",	\
+			"Intel(R) Core(TM)2 Quad CPU Q84"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_YORKFIELD,
@@ -1718,29 +1894,9 @@ static PROCESSOR_SPECIFIC Core_Penryn_Specific[] = {
 				"Pentium(R) Dual-Core CPU E6800"
 */
 	{
-	.BrandSubStr = "Intel(R) Celeron(R) CPU E3",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_WOLFDALE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Pentium(R) Dual-Core CPU E5",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_WOLFDALE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Pentium(R) Dual-Core CPU E6",
+	.Brand = ZLIST( "Pentium(R) Dual-Core CPU E6",	\
+			"Pentium(R) Dual-Core CPU E5",	\
+			"Intel(R) Celeron(R) CPU E3"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_WOLFDALE,
@@ -1786,7 +1942,7 @@ static PROCESSOR_SPECIFIC Core_Penryn_Specific[] = {
 		''		"Intel(R) Core(TM)2 Extreme CPU Q9300"
 */
 	{
-	.BrandSubStr = "Intel(R) Core(TM)2 Extreme CPU Q9300",
+	.Brand = ZLIST("Intel(R) Core(TM)2 Extreme CPU Q9300"),
 	.Boost = {+2, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_PENRYN,
@@ -1796,12 +1952,12 @@ static PROCESSOR_SPECIFIC Core_Penryn_Specific[] = {
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_NONE
 	},
-	{NULL}
+	{0}
 };
 
 static PROCESSOR_SPECIFIC Nehalem_Bloomfield_Specific[] = {
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7 CPU 920",
+	.Brand = ZLIST("Intel(R) Core(TM) i7 CPU 920"),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = 0,
@@ -1811,12 +1967,31 @@ static PROCESSOR_SPECIFIC Nehalem_Bloomfield_Specific[] = {
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_TURBO_UNLOCK|LATCH_UNCORE_UNLOCK
 	},
-	{NULL}
+	{0}
+};
+
+static PROCESSOR_SPECIFIC Nehalem_Lynnfield_Specific[] = {
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7 CPU X",	\
+			"Intel(R) Core(TM) i7 CPU Q"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_CLARKSFIELD,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_NONE
+	},
+	{0}
 };
 
 static PROCESSOR_SPECIFIC Westmere_EP_Specific[] = {
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7 CPU 970",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7 CPU X 990",	\
+			"Intel(R) Core(TM) i7 CPU X 980",	\
+			"Intel(R) Core(TM) i7 CPU 980" ,	\
+			"Intel(R) Core(TM) i7 CPU 970"		),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_GULFTOWN,
@@ -1827,10 +2002,26 @@ static PROCESSOR_SPECIFIC Westmere_EP_Specific[] = {
 	.Latch = LATCH_NONE
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7 CPU 980",
+	.Brand = ZLIST("Intel(R) Xeon(R) CPU W3690"),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_GULFTOWN,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_NONE
+	},
+	{0}
+};
+
+static PROCESSOR_SPECIFIC Haswell_DT_Specific[] = {
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-4940MX",	\
+			"Intel(R) Core(TM) i7-4930MX"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_HASWELL_MOBILE_EX,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
@@ -1838,10 +2029,15 @@ static PROCESSOR_SPECIFIC Westmere_EP_Specific[] = {
 	.Latch = LATCH_NONE
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7 CPU X 980",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-4910MQ",	\
+			"Intel(R) Core(TM) i7-4900MQ",	\
+			"Intel(R) Core(TM) i7-4810MQ",	\
+			"Intel(R) Core(TM) i7-4800MQ",	\
+			"Intel(R) Core(TM) i7-4710HQ",	\
+			"Intel(R) Core(TM) i7-4700HQ"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_GULFTOWN,
+	.CodeNameIdx = CN_HASWELL_CRYSTALWELL,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
@@ -1849,10 +2045,11 @@ static PROCESSOR_SPECIFIC Westmere_EP_Specific[] = {
 	.Latch = LATCH_NONE
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7 CPU X 990",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-47",	\
+			"Intel(R) Core(TM) i5-46"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_GULFTOWN,
+	.CodeNameIdx = CN_HASWELL_CANYON,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
@@ -1860,22 +2057,119 @@ static PROCESSOR_SPECIFIC Westmere_EP_Specific[] = {
 	.Latch = LATCH_NONE
 	},
 	{
-	.BrandSubStr = "Intel(R) Xeon(R) CPU W3690",
+	.Brand = ZLIST("Intel(R) Xeon(R) CPU E3-12"),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_GULFTOWN,
+	.CodeNameIdx = CN_HASWELL_DENLOW,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_NONE
 	},
-	{NULL}
+	{
+	.Brand = ZLIST("Intel(R) 4th Gen Core(TM) i"),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_HASWELL_EMBEDDED,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_NONE
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i5-4300M",	\
+			"Intel(R) Core(TM) i5-4200H",	\
+			"Intel(R) Core(TM) i3-4000M",	\
+			"Intel(R) Pentium(R) CPU 3",	\
+			"Intel(R) Celeron(R) CPU 2"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_HASWELL_MOBILE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_NONE
+	},
+	{0}
+};
+
+static PROCESSOR_SPECIFIC Skylake_X_Specific[] = {
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i9-10980XE", \
+			"Intel(R) Core(TM) i9-10940X" , \
+			"Intel(R) Core(TM) i9-10920X" , \
+			"Intel(R) Core(TM) i9-10900X" , \
+			"Intel(R) Xeon(R) Platinum 92", \
+			"Intel(R) Xeon(R) Platinum 82", \
+			"Intel(R) Xeon(R) Gold 62",	\
+			"Intel(R) Xeon(R) Gold 52",	\
+			"Intel(R) Xeon(R) Silver 42",	\
+			"Intel(R) Xeon(R) Bronze 32",	\
+			"Intel(R) Xeon(R) W-32",	\
+			"Intel(R) Xeon(R) W-22" 	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_CASCADELAKE_X,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{0}
 };
 
 static PROCESSOR_SPECIFIC Kabylake_Specific[] = {
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i3-7",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-7920HQ",	\
+			"Intel(R) Core(TM) i7-7820HQ",	\
+			"Intel(R) Core(TM) i7-7700HQ",	\
+			"Intel(R) Core(TM) i5-7440HQ",	\
+			"Intel(R) Core(TM) i5-7300HQ",	\
+			"Intel(R) Core(TM) i3-7100H"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_H,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-7740X",	\
+			"Intel(R) Core(TM) i5-7640X"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_X,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-766",	\
+			"Intel(R) Core(TM) i7-760",	\
+			"Intel(R) Core(TM) i7-756",	\
+			"Intel(R) Core(TM) i7-750"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_U,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-770"	\
+			"Intel(R) Core(TM) i5-760",	\
+			"Intel(R) Core(TM) i5-750",	\
+			"Intel(R) Core(TM) i5-740"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_KABYLAKE_S,
@@ -1886,7 +2180,52 @@ static PROCESSOR_SPECIFIC Kabylake_Specific[] = {
 	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i5-7",
+	.Brand = ZLIST( "Intel(R) Core(TM) i5-736",	\
+			"Intel(R) Core(TM) i5-730",	\
+			"Intel(R) Core(TM) i5-728",	\
+			"Intel(R) Core(TM) i5-726",	\
+			"Intel(R) Core(TM) i5-720"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_U,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-7Y7",	\
+			"Intel(R) Core(TM) i5-7Y5",	\
+			"Intel(R) Core(TM) m3-7Y3"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_Y,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i3-7167U",	\
+			"Intel(R) Core(TM) i3-7130U",	\
+			"Intel(R) Core(TM) i3-7100U",	\
+			"Intel(R) Core(TM) i3-7020U"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_U,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i3-735",	\
+			"Intel(R) Core(TM) i3-732",	\
+			"Intel(R) Core(TM) i3-730",	\
+			"Intel(R) Core(TM) i3-710"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_KABYLAKE_S,
@@ -1897,7 +2236,39 @@ static PROCESSOR_SPECIFIC Kabylake_Specific[] = {
 	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7-7",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-8650U",	\
+			"Intel(R) Core(TM) i7-8550U",	\
+			"Intel(R) Core(TM) i5-8350U",	\
+			"Intel(R) Core(TM) i5-8250U",	\
+			"Intel(R) Core(TM) i3-8130U"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_R,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-8809G",	\
+			"Intel(R) Core(TM) i7-8709G",	\
+			"Intel(R) Core(TM) i7-8706G",	\
+			"Intel(R) Core(TM) i7-8705G",	\
+			"Intel(R) Core(TM) i7-8305G"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_G,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Pentium(R) CPU G46",	\
+			"Intel(R) Pentium(R) CPU G45",	\
+			"Intel(R) Celeron(R) CPU G39"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_KABYLAKE_S,
@@ -1908,94 +2279,208 @@ static PROCESSOR_SPECIFIC Kabylake_Specific[] = {
 	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i3-8",
+	.Brand = ZLIST( "Intel(R) Pentium(R) Processor 44",	\
+			"Intel(R) Celeron(R) Processor 3965Y"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_Y,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Celeron(R) Processor 3965U",	\
+			"Intel(R) Celeron(R) Processor 3865U"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_KABYLAKE_U,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Pentium(R) Gold G56", \
+			"Intel(R) Pentium(R) Gold G55", \
+			"Intel(R) Pentium(R) Gold G54", \
+			"Intel(R) Celeron(R) G49"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_COFFEELAKE_S,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i5-8",
+	.Brand = ZLIST( "Intel(R) Core(TM) i9-8950H",	\
+			"Intel(R) Core(TM) i7-8850H",	\
+			"Intel(R) Core(TM) i7-8750H",	\
+			"Intel(R) Core(TM) i7-8700B",	\
+			"Intel(R) Core(TM) i5-8500B",	\
+			"Intel(R) Core(TM) i5-8400B",	\
+			"Intel(R) Core(TM) i5-8400H",	\
+			"Intel(R) Core(TM) i5-8300H",	\
+			"Intel(R) Core(TM) i3-8100B",	\
+			"Intel(R) Core(TM) i3-8100H"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_COFFEELAKE_H,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-8086K",	\
+			"Intel(R) Core(TM) i7-8700",	\
+			"Intel(R) Core(TM) i5-8600",	\
+			"Intel(R) Core(TM) i5-8500",	\
+			"Intel(R) Core(TM) i5-8400",	\
+			"Intel(R) Core(TM) i3-8350K",	\
+			"Intel(R) Core(TM) i3-8300",	\
+			"Intel(R) Core(TM) i3-8100"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_COFFEELAKE_S,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7-8",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-8569U",	\
+			"Intel(R) Core(TM) i7-8559U",	\
+			"Intel(R) Core(TM) i7-8557U",	\
+			"Intel(R) Core(TM) i5-8279U",	\
+			"Intel(R) Core(TM) i5-8269U",	\
+			"Intel(R) Core(TM) i5-8259U",	\
+			"Intel(R) Core(TM) i5-8257U",	\
+			"Intel(R) Core(TM) i3-8109U"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_COFFEELAKE_S,
+	.CodeNameIdx = CN_COFFEELAKE_U,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Pentium(R) Gold G5",
+	.Brand = ZLIST( "Intel(R) Core(TM) i9-9980H",	\
+			"Intel(R) Core(TM) i9-9880H",	\
+			"Intel(R) Core(TM) i7-9850H",	\
+			"Intel(R) Core(TM) i7-9750H",	\
+			"Intel(R) Core(TM) i5-9400H",	\
+			"Intel(R) Core(TM) i5-9300H"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_COFFEELAKE_S,
+	.CodeNameIdx = CN_COFFEELAKE_HR,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Celeron(R) G4",
-	.Boost = {0, 0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_COFFEELAKE_S,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 0,
-	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
-	},
-	{
-	.BrandSubStr = "Intel(R) Core(TM) i5-9600K",
+	.Brand = ZLIST( "Intel(R) Core(TM) i9-990",	\
+			"Intel(R) Core(TM) i7-970",	\
+			"Intel(R) Core(TM) i5-960",	\
+			"Intel(R) Core(TM) i5-950",	\
+			"Intel(R) Core(TM) i5-940",	\
+			"Intel(R) Core(TM) i3-935",	\
+			"Intel(R) Core(TM) i3-932",	\
+			"Intel(R) Core(TM) i3-930",	\
+			"Intel(R) Core(TM) i3-910"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_COFFEELAKE_R,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
+	{0}
+};
+
+static PROCESSOR_SPECIFIC Kabylake_UY_Specific[] = {
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i7-9700K",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-8665U",	\
+			"Intel(R) Core(TM) i7-8565U",	\
+			"Intel(R) Core(TM) i5-8365U",	\
+			"Intel(R) Core(TM) i5-8265U",	\
+			"Intel(R) Core(TM) i3-8145U",	\
+			"Intel(R) Pentium(R) CPU 5405U",\
+			"Intel(R) Celeron(R) CPU 4305U",\
+			"Intel(R) Celeron(R) CPU 4205U"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_COFFEELAKE_R,
+	.CodeNameIdx = CN_WHISKEYLAKE_U,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
 	{
-	.BrandSubStr = "Intel(R) Core(TM) i9-9900K",
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-10510Y",	\
+			"Intel(R) Core(TM) i5-10310Y",	\
+			"Intel(R) Core(TM) i5-10210Y",	\
+			"Intel(R) Core(TM) i3-10110Y",	\
+			"Intel(R) Core(TM) i7-8500Y" ,	\
+			"Intel(R) Core(TM) i5-8310Y" ,	\
+			"Intel(R) Core(TM) i5-8210Y" ,	\
+			"Intel(R) Core(TM) i5-8200Y" ,	\
+			"Intel(R) Core(TM) m3-8100Y"	),
 	.Boost = {0, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_COFFEELAKE_R,
+	.CodeNameIdx = CN_AMBERLAKE_Y,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 0,
 	.TurboUnlocked = 0,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_NONE
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
 	},
-	{NULL}
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i9-10980HK", \
+			"Intel(R) Core(TM) i7-10875H",	\
+			"Intel(R) Core(TM) i7-10850H",	\
+			"Intel(R) Core(TM) i7-10750H",	\
+			"Intel(R) Core(TM) i5-10400H",	\
+			"Intel(R) Core(TM) i5-10300H"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_COMETLAKE_H,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "Intel(R) Core(TM) i7-10710U",	\
+			"Intel(R) Core(TM) i7-10510U",	\
+			"Intel(R) Core(TM) i5-10210U",	\
+			"Intel(R) Core(TM) i3-10110U",	\
+			"Intel(R) Pentium(R) Gold 6405U",\
+			"Intel(R) Celeron(R) CPU 5205U"	),
+	.Boost = {0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_COMETLAKE_U,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 0,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 1,
+	.Latch = LATCH_UNCORE_UNLOCK
+	},
+	{0}
 };
 
 /*	AMD Family 17h
@@ -2004,8 +2489,8 @@ static PROCESSOR_SPECIFIC Kabylake_Specific[] = {
 */
 static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	{	/* Index 0 is a placeholder: must be present!		*/
-	.BrandSubStr = VENDOR_AMD,
-	.Boost = {+0,  0},
+	.Brand = ZLIST(VENDOR_AMD),
+	.Boost = {+0, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = 0,
 	.TgtRatioUnlocked = 0,
@@ -2015,7 +2500,167 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 3 1200",
+	.Brand = ZLIST("AMD Ryzen Embedded V"),
+	.Boost = {+16, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen Embedded R", \
+			"AMD Athlon Silver",	\
+			"AMD Athlon Gold"	),
+	.Boost = {+9, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Athlon 3000G"),
+	.Boost = {+5, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Athlon 300U"),
+	.Boost = {+9, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Athlon 2"),
+	.Boost = {+1, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Athlon 3"),
+	.Boost = {+9, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Athlon PRO"),
+	.Boost = {+5, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 PRO 1200"),
+	.Boost = {+3, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 3 PRO 1300", \
+			"AMD Ryzen 5 PRO 1500"	),
+	.Boost = {+2, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 PRO 1600"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 PRO 1700X"),
+	.Boost = {+4, 0},
+	.Param.Offset = {20, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 PRO 1700"),
+	.Boost = {+7, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 3 1300X",	\
+			"AMD Ryzen 5 1500X"	),
+	.Boost = {+2, +2},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 5 1600X",	\
+			"AMD Ryzen 7 1700X",	\
+			"AMD Ryzen 7 1800X"	),
+	.Boost = {+4, +1},
+	.Param.Offset = {20, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 1200"),
 	.Boost = {+3, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_SUMMIT_RIDGE,
@@ -2026,29 +2671,7 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 3 1300X",
-	.Boost = {+2, +2},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 3 2200G",
-	.Boost = {+2,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_RAVEN_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 5 1400",
+	.Brand = ZLIST("AMD Ryzen 5 1400"),
 	.Boost = {+2, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_SUMMIT_RIDGE,
@@ -2059,19 +2682,8 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 5 2400G",
-	.Boost = {+3,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_RAVEN_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 5 1500X",
-	.Boost = {+2, +2},
+	.Brand = ZLIST("AMD Ryzen 5 1600"),
+	.Boost = {+4, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_SUMMIT_RIDGE,
 	.TgtRatioUnlocked = 0,
@@ -2081,41 +2693,120 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 5 2500U",
+	.Brand = ZLIST("AMD Ryzen 7 1700"),
+	.Boost = {+7, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 3 PRO 2200GE",	\
+			"AMD Ryzen 5 2600H"		),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 PRO 2200G"),
+	.Boost = {+2, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 2200GE"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 2200G"),
+	.Boost = {+2, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 PRO 2400GE"),
+	.Boost = {+6, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 PRO 2400G"),
+	.Boost = {+3, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 2400GE"),
+	.Boost = {+6, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 2400G"),
+	.Boost = {+3, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RAVEN_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 2500U"),
 	.Boost = {+16, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_RAVEN_RIDGE,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 5 1600X",
+	.Brand = ZLIST( "AMD Ryzen 3 2300X",	\
+			"AMD Ryzen 5 2500X"	),
 	.Boost = {+4, +1},
-	.Param.Offset = {20, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 5 1600",
-	.Boost = {+4, +1},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 5 2600X",
-	.Boost = {+5, +2},
 	.Param.Offset = {10, 0},
 	.CodeNameIdx = CN_PINNACLE_RIDGE,
 	.TgtRatioUnlocked = 0,
@@ -2125,7 +2816,29 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 5 2600",
+	.Brand = ZLIST("AMD Ryzen 5 2600E"),
+	.Boost = {+8, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 PRO 2600"),
+	.Boost = {+5, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 2600"),
 	.Boost = {+3, +2},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_PINNACLE_RIDGE,
@@ -2136,51 +2849,18 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 7 1700X",
-	.Boost = {+4, +1},
-	.Param.Offset = {20, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 7 1700",
-	.Boost = {+7, +1},
+	.Brand = ZLIST("AMD Ryzen 7 2800H"),
+	.Boost = {+5, 0},
 	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
+	.CodeNameIdx = CN_RAVEN_RIDGE,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 7 1800X",
-	.Boost = {+4, +1},
-	.Param.Offset = {20, 0},
-	.CodeNameIdx = CN_SUMMIT_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 7 2700X",
-	.Boost = {+5, +2},
-	.Param.Offset = {10, 0},
-	.CodeNameIdx = CN_PINNACLE_RIDGE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 7 2700U",
+	.Brand = ZLIST("AMD Ryzen 7 2700U"),
 	.Boost = {+16, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_RAVEN_RIDGE,
@@ -2191,7 +2871,52 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 7 2700",
+	.Brand = ZLIST("AMD Ryzen 7 PRO 2700X"),
+	.Boost = {+5, 0},
+	.Param.Offset = {10, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 PRO 2700"),
+	.Boost = {+9, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 7 2700X",	\
+			"AMD Ryzen 5 2600X"	),
+	.Boost = {+5, +2},
+	.Param.Offset = {10, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 2700E"),
+	.Boost = {+12, 0},
+	.Param.Offset = {0, 0},
+	.CodeNameIdx = CN_PINNACLE_RIDGE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 2700"),
 	.Boost = {+8, +2},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_PINNACLE_RIDGE,
@@ -2202,7 +2927,113 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 7 3600X",
+	.Brand = ZLIST("AMD Ryzen 5 PRO 3400GE"),
+	.Boost = {+7, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 5 PRO 3400G",	\
+			"AMD Ryzen 3 PRO 3200GE"	),
+	.Boost = {+5, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 PRO 3200G"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 3400GE"),
+	.Boost = {+7, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 3 3200GE",	\
+			"AMD Ryzen 5 3400G"	),
+	.Boost = {+5, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 3 3200G"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 5 3580U",	\
+			"AMD Ryzen 5 3550H",	\
+			"AMD Ryzen 5 3500U"	),
+	.Boost = {+16, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 7 3780U",	\
+			"AMD Ryzen 7 3750H",	\
+			"AMD Ryzen 7 3700U"	),
+	.Boost = {+17, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_PICASSO,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 PRO 3600"),
+	.Boost = {+6, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_MATISSE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 5 3600X",	\
+			"AMD Ryzen 5 3600"	),
 	.Boost = {+6, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_MATISSE,
@@ -2213,29 +3044,19 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 5 3600",
-	.Boost = {+6, +1},
+	.Brand = ZLIST("AMD Ryzen 7 PRO 3700"),
+	.Boost = {+8, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_MATISSE,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 7 3700X",
-	.Boost = {+7, +1},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_MATISSE,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD Ryzen 7 3800X",
+	.Brand = ZLIST(	"AMD Ryzen 5 3500X",	\
+			"AMD Ryzen 7 3800X"	),
 	.Boost = {+5, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_MATISSE,
@@ -2246,7 +3067,19 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen 9 3900X",
+	.Brand = ZLIST("AMD Ryzen 9 PRO 3900"),
+	.Boost = {+12, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_MATISSE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 7 3700X",	\
+			"AMD Ryzen 9 3900X"	),
 	.Boost = {+7, +1},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_MATISSE,
@@ -2257,7 +3090,108 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 1950X",
+	.Brand = ZLIST("AMD Ryzen 9 3950X"),
+	.Boost = {+11, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_MATISSE,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 3 4300U",	\
+			"AMD Ryzen 5 4600H"	),
+	.Boost = {+10, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 4500U"),
+	.Boost = {+17, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 5 4600U"),
+	.Boost = {+19, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 4700U"),
+	.Boost = {+21, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 7 4800U"),
+	.Boost = {+24, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD Ryzen 7 4800H",	\
+			"AMD Ryzen 9 4900HS"	),
+	.Boost = {+13, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 9 4900U"),
+	.Boost = {+24, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen 9 4900H"),
+	.Boost = {+11, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_RENOIR,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen Threadripper 1950X"),
 	.Boost = {+6, +2},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_WHITEHAVEN,
@@ -2268,7 +3202,7 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 1920X",
+	.Brand = ZLIST("AMD Ryzen Threadripper 1920X"),
 	.Boost = {+5, +2},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_WHITEHAVEN,
@@ -2279,7 +3213,7 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 1900X",
+	.Brand = ZLIST("AMD Ryzen Threadripper 1900X"),
 	.Boost = {+2, +2},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_WHITEHAVEN,
@@ -2290,7 +3224,8 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 2990",
+	.Brand = ZLIST( "AMD Ryzen Threadripper 2990",	\
+			"AMD Ryzen Threadripper 2970"	),
 	.Boost = {+12, 0},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_COLFAX,
@@ -2301,8 +3236,8 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 2970",
-	.Boost = {+12, 0},
+	.Brand = ZLIST("AMD Ryzen Threadripper 2950"),
+	.Boost = {+9, 0},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_COLFAX,
 	.TgtRatioUnlocked = 0,
@@ -2312,8 +3247,8 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 2950",
-	.Boost = {+9,  0},
+	.Brand = ZLIST("AMD Ryzen Threadripper 2920"),
+	.Boost = {+8, 0},
 	.Param.Offset = {27, 0},
 	.CodeNameIdx = CN_COLFAX,
 	.TgtRatioUnlocked = 0,
@@ -2323,10 +3258,10 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD Ryzen Threadripper 2920",
-	.Boost = {+8,  0},
-	.Param.Offset = {27, 0},
-	.CodeNameIdx = CN_COLFAX,
+	.Brand = ZLIST("AMD Ryzen Threadripper 3990X"),
+	.Boost = {+14, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_CASTLE_PEAK,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
 	.TurboUnlocked = 1,
@@ -2334,153 +3269,327 @@ static PROCESSOR_SPECIFIC Family_17h_Specific[] = {
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD EPYC 7351P",
-	.Boost = {+5,  0},
+	.Brand = ZLIST("AMD Ryzen Threadripper 3970X"),
+	.Boost = {+8, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_CASTLE_PEAK,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD Ryzen Threadripper 3960X"),
+	.Boost = {+7, +1},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_CASTLE_PEAK,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 1,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{	/* AMD EPYC Server Processors				*/
+	.Brand = ZLIST("AMD EPYC 7251"),
+	.Boost = {+8, 0},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_NAPLES,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD EPYC 7401P",
+	.Brand = ZLIST("AMD EPYC 7261"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_NAPLES,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7281"),
+	.Boost = {+6, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_NAPLES,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7351P",	\
+			"AMD EPYC 7351",	\
+			"AMD EPYC 7301" 	),
+	.Boost = {+5, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_NAPLES,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7401P",	\
+			"AMD EPYC 7401" 	),
 	.Boost = {+8, +2},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_NAPLES,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD EPYC 7551P",
-	.Boost = {+6, +4},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7251",
-	.Boost = {+8,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7281",
-	.Boost = {+6,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7301",
-	.Boost = {+5,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7351",
-	.Boost = {+5,  0},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7401",
-	.Boost = {+8, +2},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7451",
+	.Brand = ZLIST("AMD EPYC 7451"),
 	.Boost = {+6, +3},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_NAPLES,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD EPYC 7501",
+	.Brand = ZLIST( "AMD EPYC 7551P",	\
+			"AMD EPYC 7551",	\
+			"AMD EPYC 7501" 	),
 	.Boost = {+6, +4},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_NAPLES,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
 	{
-	.BrandSubStr = "AMD EPYC 7551",
-	.Boost = {+6, +4},
-	.Param.Offset = { 0, 0},
-	.CodeNameIdx = CN_NAPLES,
-	.TgtRatioUnlocked = 0,
-	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
-	.UncoreUnlocked = 0,
-	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
-	},
-	{
-	.BrandSubStr = "AMD EPYC 7601",
+	.Brand = ZLIST("AMD EPYC 7601"),
 	.Boost = {+5, +5},
 	.Param.Offset = { 0, 0},
 	.CodeNameIdx = CN_NAPLES,
 	.TgtRatioUnlocked = 0,
 	.ClkRatioUnlocked = 1,
-	.TurboUnlocked = 1,
+	.TurboUnlocked = 0,
 	.UncoreUnlocked = 0,
 	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
 	},
-	{NULL}
+	{
+	.Brand = ZLIST( "AMD EPYC 7232P",	\
+			"AMD EPYC 7252" 	),
+	.Boost = {+1, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7262"),
+	.Boost = {+2, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7272"),
+	.Boost = {+3, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7282"),
+	.Boost = {+4, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7302P",	\
+			"AMD EPYC 7302" 	),
+	.Boost = {+3, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7402P",	\
+			"AMD EPYC 7402" 	),
+	.Boost = {+6, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7352",	\
+			"AMD EPYC 7502P",	\
+			"AMD EPYC 7502" 	),
+	.Boost = {+9, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7542"),
+	.Boost = {+5, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7552"),
+	.Boost = {+11, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7452",	\
+			"AMD EPYC 7642" 	),
+	.Boost = {+10, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7662"),
+	.Boost = {+13, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST( "AMD EPYC 7702P",	\
+			"AMD EPYC 7702" 	),
+	.Boost = {+14, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7742"),
+	.Boost = {+12, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{
+	.Brand = ZLIST("AMD EPYC 7H12"),
+	.Boost = {+7, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_ROME,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{	/* AMD EPYC Embedded Processors 			*/
+	.Brand = ZLIST( "AMD EPYC 31",	\
+			"AMD EPYC 32"	),
+	.Boost = {+0, 0},
+	.Param.Offset = { 0, 0},
+	.CodeNameIdx = CN_NAPLES,
+	.TgtRatioUnlocked = 0,
+	.ClkRatioUnlocked = 1,
+	.TurboUnlocked = 0,
+	.UncoreUnlocked = 0,
+	.Latch = LATCH_CLK_RATIO_UNLOCK|LATCH_TURBO_UNLOCK
+	},
+	{0}
 };
 
 #ifdef CONFIG_CPU_FREQ
-static int CoreFreqK_Policy_Exit(struct cpufreq_policy *policy) ;
-static int CoreFreqK_Policy_Init(struct cpufreq_policy *policy) ;
-static int CoreFreqK_Policy_Verify(struct cpufreq_policy *policy) ;
-static int CoreFreqK_SetPolicy(struct cpufreq_policy *policy) ;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 19)
+#define CPUFREQ_POLICY_UNKNOWN		(0)
+#endif
+static int CoreFreqK_Policy_Exit(struct cpufreq_policy*) ;
+static int CoreFreqK_Policy_Init(struct cpufreq_policy*) ;
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 19))   \
+  && (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 25)))  \
+  || (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 5, 3))
+static int CoreFreqK_Policy_Verify(struct cpufreq_policy_data*) ;
+#else
+static int CoreFreqK_Policy_Verify(struct cpufreq_policy*) ;
+#endif
+static int CoreFreqK_SetPolicy(struct cpufreq_policy*) ;
+static int CoreFreqK_Bios_Limit(int, unsigned int*) ;
+static int CoreFreqK_SetBoost(int) ;
+static ssize_t CoreFreqK_Show_SetSpeed(struct cpufreq_policy*, char*);
+static int CoreFreqK_Store_SetSpeed(struct cpufreq_policy*, unsigned int) ;
 #endif /* CONFIG_CPU_FREQ */
-static unsigned int Core2_GetFreq(unsigned int cpu) ;
-static unsigned int Nehalem_GetFreq(unsigned int cpu) ;
-static unsigned int SandyBridge_GetFreq(unsigned int cpu) ;
+static unsigned int Policy_Intel_GetFreq(unsigned int cpu) ;
+static void Policy_Core2_SetTarget(void *arg) ;
+static void Policy_Nehalem_SetTarget(void *arg) ;
+static void Policy_SandyBridge_SetTarget(void *arg) ;
+static void Policy_HWP_SetTarget(void *arg) ;
+#define Policy_Broadwell_EP_SetTarget	Policy_HWP_SetTarget
+#define Policy_Skylake_SetTarget	Policy_HWP_SetTarget
 
 static SYSTEM_DRIVER CORE2_Driver = {
 	.IdleState	= NULL,
-	.GetFreq	= Core2_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_Core2_SetTarget
 };
 
 /* Source: /drivers/idle/intel_idle.c					*/
@@ -2518,7 +3627,8 @@ static IDLE_STATE NHM_IdleState[] = {
 
 static SYSTEM_DRIVER NHM_Driver = {
 	.IdleState	= NHM_IdleState,
-	.GetFreq	= Nehalem_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_Nehalem_SetTarget
 };
 
 static IDLE_STATE SNB_IdleState[] = {
@@ -2562,7 +3672,8 @@ static IDLE_STATE SNB_IdleState[] = {
 
 static SYSTEM_DRIVER SNB_Driver = {
 	.IdleState	= SNB_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_SandyBridge_SetTarget
 };
 
 static IDLE_STATE IVB_IdleState[] = {
@@ -2606,7 +3717,8 @@ static IDLE_STATE IVB_IdleState[] = {
 
 static SYSTEM_DRIVER IVB_Driver = {
 	.IdleState	= IVB_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_SandyBridge_SetTarget
 };
 
 static IDLE_STATE HSW_IdleState[] = {
@@ -2671,7 +3783,8 @@ static IDLE_STATE HSW_IdleState[] = {
 
 static SYSTEM_DRIVER HSW_Driver = {
 	.IdleState	= HSW_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_SandyBridge_SetTarget
 };
 
 static IDLE_STATE BDW_IdleState[] = {
@@ -2736,7 +3849,14 @@ static IDLE_STATE BDW_IdleState[] = {
 
 static SYSTEM_DRIVER BDW_Driver = {
 	.IdleState	= BDW_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_SandyBridge_SetTarget
+};
+
+static SYSTEM_DRIVER BDW_EP_Driver = {
+	.IdleState	= BDW_IdleState,
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_Broadwell_EP_SetTarget
 };
 
 static IDLE_STATE SKL_IdleState[] = {
@@ -2801,7 +3921,8 @@ static IDLE_STATE SKL_IdleState[] = {
 
 static SYSTEM_DRIVER SKL_Driver = {
 	.IdleState	= SKL_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_Skylake_SetTarget
 };
 
 static IDLE_STATE SKX_IdleState[] = {
@@ -2831,7 +3952,8 @@ static IDLE_STATE SKX_IdleState[] = {
 
 static SYSTEM_DRIVER SKX_Driver = {
 	.IdleState	= SKX_IdleState,
-	.GetFreq	= SandyBridge_GetFreq
+	.GetFreq	= Policy_Intel_GetFreq,
+	.SetTarget	= Policy_Skylake_SetTarget
 };
 
 static ARCH Arch[ARCHITECTURES] = {
@@ -3307,7 +4429,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_QPI_ids,
 	.Uncore = {
@@ -3331,7 +4457,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_DMI_ids,
 	.Uncore = {
@@ -3339,7 +4469,7 @@ static ARCH Arch[ARCHITECTURES] = {
 		.Stop = Stop_Uncore_Nehalem,
 		.ClockMod = NULL
 		},
-	.Specific = Void_Specific,
+	.Specific = Nehalem_Lynnfield_Specific,
 	.SystemDriver = &NHM_Driver,
 	.Architecture = Arch_Nehalem_Lynnfield
 	},
@@ -3355,7 +4485,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_DMI_ids,
 	.Uncore = {
@@ -3379,7 +4513,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = NULL,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_QPI_ids,
 	.Uncore = {
@@ -3404,7 +4542,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_DMI_ids,
 	.Uncore = {
@@ -3428,7 +4570,11 @@ static ARCH Arch[ARCHITECTURES] = {
 	.ClockMod = ClockMod_Nehalem_PPC,
 	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Westmere_EP_ids,
 	.Uncore = {
@@ -3442,7 +4588,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	},
 [Westmere_EX] = {							/* 25*/
 	.Signature = _Westmere_EX,
-	.Query = Query_Core2,
+	.Query = Query_Core2, /* Xeon processor 7500 series-based platform */
 	.Update = PerCore_Nehalem_Query,
 	.Start = Start_Nehalem,
 	.Stop = Stop_Nehalem,
@@ -3450,9 +4596,13 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Timer = InitTimer_Nehalem,
 	.BaseClock = BaseClock_Westmere,
 	.ClockMod = ClockMod_Nehalem_PPC,
-	.TurboClock = NULL,
+	.TurboClock = Intel_Turbo_Config8C,
 	.thermalFormula = THERMAL_FORMULA_INTEL,
+#if defined(HWM_CHIPSET) && (HWM_CHIPSET == W83627)
+	.voltageFormula = VOLTAGE_FORMULA_WINBOND_IO,
+#else
 	.voltageFormula = VOLTAGE_FORMULA_NONE,
+#endif
 	.powerFormula   = POWER_FORMULA_NONE,
 	.PCI_ids = PCI_Nehalem_QPI_ids,
 	.Uncore = {
@@ -3583,7 +4733,7 @@ static ARCH Arch[ARCHITECTURES] = {
 		.Stop = Stop_Uncore_SandyBridge,
 		.ClockMod = NULL
 		},
-	.Specific = Void_Specific,
+	.Specific = Haswell_DT_Specific,
 	.SystemDriver = &HSW_Driver,
 	.Architecture = Arch_Haswell_DT
 	},
@@ -3605,7 +4755,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Haswell_EP,
 		.Stop = Stop_Uncore_Haswell_EP,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = &HSW_Driver,
@@ -3678,7 +4828,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Broadwell,
 		.Stop = Stop_Uncore_Broadwell,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = &BDW_Driver,
@@ -3702,10 +4852,10 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Haswell_EP,
 		.Stop = Stop_Uncore_Haswell_EP,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
-	.SystemDriver = &BDW_Driver,
+	.SystemDriver = &BDW_EP_Driver,
 	.Architecture = Arch_Broadwell_D
 	},
 [Broadwell_H] = {							/* 36*/
@@ -3726,7 +4876,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Broadwell,
 		.Stop = Stop_Uncore_Broadwell,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = &BDW_Driver,
@@ -3750,10 +4900,10 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Haswell_EP,
 		.Stop = Stop_Uncore_Haswell_EP,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
-	.SystemDriver = &BDW_Driver,
+	.SystemDriver = &BDW_EP_Driver,
 	.Architecture = Arch_Broadwell_EP
 	},
 
@@ -3775,7 +4925,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake,
 		.Stop = Stop_Uncore_Skylake,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = &SKL_Driver,
@@ -3799,7 +4949,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake,
 		.Stop = Stop_Uncore_Skylake,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = &SKL_Driver,
@@ -3823,9 +4973,9 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake_X,
 		.Stop = Stop_Uncore_Skylake_X,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
-	.Specific = Void_Specific,
+	.Specific = Skylake_X_Specific,
 	.SystemDriver = &SKX_Driver,
 	.Architecture = Arch_Skylake_X
 	},
@@ -3848,7 +4998,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_SandyBridge,
 		.Stop = Stop_Uncore_SandyBridge,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = NULL,
@@ -3897,9 +5047,9 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake,
 		.Stop = Stop_Uncore_Skylake,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
-	.Specific = Void_Specific,
+	.Specific = Kabylake_UY_Specific,
 	.SystemDriver = &SKL_Driver,
 	.Architecture = Arch_Kabylake_UY
 	},
@@ -3922,7 +5072,7 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake,
 		.Stop = Stop_Uncore_Skylake,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = NULL,
@@ -3947,14 +5097,38 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Haswell_ULT,
 		.Stop = Stop_Uncore_Haswell_ULT,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = NULL,
 	.Architecture = Arch_Geminilake
 	},
 
-[Icelake_UY] = {							/* 46*/
+[Icelake] = {								/* 46*/
+	.Signature = _Icelake,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Icelake
+	},
+[Icelake_UY] = {							/* 47*/
 	.Signature = _Icelake_UY,
 	.Query = Query_SandyBridge,
 	.Update = PerCore_Skylake_Query,
@@ -3972,11 +5146,255 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Uncore = {
 		.Start = Start_Uncore_Skylake,
 		.Stop = Stop_Uncore_Skylake,
-		.ClockMod = NULL
+		.ClockMod = Haswell_Uncore_Ratio
 		},
 	.Specific = Void_Specific,
 	.SystemDriver = NULL,
 	.Architecture = Arch_Icelake_UY
+	},
+[Icelake_X] = {								/* 48*/
+	.Signature = _Icelake_X,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Icelake_X
+	},
+[Icelake_D] = {								/* 49*/
+	.Signature = _Icelake_D,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Icelake_D
+	},
+
+[Sunny_Cove] = {							/* 50*/
+	.Signature = _Sunny_Cove,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Sunny_Cove
+	},
+
+[Tigerlake] = {								/* 51*/
+	.Signature = _Tigerlake,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Tigerlake
+	},
+[Tigerlake_U] = {							/* 52*/
+	.Signature = _Tigerlake_U,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Tigerlake_U
+	},
+
+[Cometlake] = {								/* 53*/
+	.Signature = _Cometlake,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Cometlake
+	},
+[Cometlake_UY] = {							/* 54*/
+	.Signature = _Cometlake_UY,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Cometlake_UY
+	},
+
+[Atom_C3000] = {
+	.Signature = _Atom_C3000,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Atom_C3000
+	},
+[Atom_Tremont] = {
+	.Signature = _Atom_Tremont,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Atom_Tremont
+	},
+[Atom_Tremont_EHL] = {
+	.Signature = _Atom_Tremont_EHL,
+	.Query = Query_SandyBridge,
+	.Update = PerCore_Skylake_Query,
+	.Start = Start_Skylake,
+	.Stop = Stop_Skylake,
+	.Exit = NULL,
+	.Timer = InitTimer_Skylake,
+	.BaseClock = BaseClock_Skylake,
+	.ClockMod = ClockMod_Skylake_HWP,
+	.TurboClock = Intel_Turbo_Config8C,
+	.thermalFormula = THERMAL_FORMULA_INTEL,
+	.voltageFormula = VOLTAGE_FORMULA_INTEL_SNB,
+	.powerFormula   = POWER_FORMULA_INTEL,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = Start_Uncore_Skylake,
+		.Stop = Stop_Uncore_Skylake,
+		.ClockMod = Haswell_Uncore_Ratio
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_Atom_Tremont_EHL
 	},
 
 [AMD_Family_0Fh] = {
@@ -4177,6 +5595,31 @@ static ARCH Arch[ARCHITECTURES] = {
 	.Specific = Family_17h_Specific,
 	.SystemDriver = NULL,
 	.Architecture = Arch_AMD_Family_17h
+	},
+
+[AMD_Family_18h] = {
+	.Signature = _AMD_Family_18h,
+	.Query = Query_AMD_Family_17h,
+	.Update = PerCore_AMD_Family_17h_Query,
+	.Start = Start_AMD_Family_17h,
+	.Stop = Stop_AMD_Family_17h,
+	.Exit = NULL,
+	.Timer = InitTimer_AMD_Family_17h,
+	.BaseClock = BaseClock_AMD_Family_17h,
+	.ClockMod = ClockMod_AMD_Zen,
+	.TurboClock = TurboClock_AMD_Zen,
+	.thermalFormula = THERMAL_FORMULA_AMD_17h,
+	.voltageFormula = VOLTAGE_FORMULA_AMD_17h,
+	.powerFormula   = POWER_FORMULA_AMD_17h,
+	.PCI_ids = PCI_Void_ids,
+	.Uncore = {
+		.Start = NULL,
+		.Stop = NULL,
+		.ClockMod = NULL
+		},
+	.Specific = Void_Specific,
+	.SystemDriver = NULL,
+	.Architecture = Arch_AMD_Family_18h
 	}
 };
 

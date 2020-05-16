@@ -1,6 +1,6 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
@@ -251,6 +251,7 @@ typedef struct
 	ENERGY_PERF_BIAS		PerfEnergyBias;
 	MISC_PWR_MGMT			PwrManagement;
 	HWP_CAPABILITIES		HWP_Capabilities;
+	HWP_INTERRUPT			HWP_Interrupt;
 	HWP_REQUEST			HWP_Request;
 } POWER_THERMAL;
 
@@ -363,13 +364,13 @@ typedef struct
 	CACHE_TOPOLOGY			T;
 
 	struct {
-		Bit64			RFLAGS,
-					CR0,
-					CR3,
-					CR4,
-					EFER;
+		Bit64			RFLAGS	__attribute__ ((aligned (8))),
+					CR0	__attribute__ ((aligned (8))),
+					CR3	__attribute__ ((aligned (8))),
+					CR4	__attribute__ ((aligned (8))),
+					EFER	__attribute__ ((aligned (8)));
 		union {
-			Bit64		EFCR;
+			Bit64		EFCR	__attribute__ ((aligned (8)));
 			VM_CR		VMCR;
 
 		};
@@ -380,6 +381,11 @@ typedef struct
 	CLOCK				Clock;
 
 	CPUID_STRUCT			CpuID[CPUID_MAX_FUNC];
+
+	struct {
+		unsigned int		Perf,
+					Target;
+	} Ratio;
 } CORE;
 
 typedef struct
@@ -498,6 +504,7 @@ typedef struct
 	/* 80h */	SNB_EP_TADWAYNESS	TAD;		/* 12x32 bits */
 		} SNB_EP;
 		struct {
+	/* 5000h */	SKL_IMC_MAD_MAPPING	MADCH;		/* 32 bits    */
 	/* 5004h */	SKL_IMC_MAD_CHANNEL	MADC0,		/* 32 bits    */
 	/* 5008h */				MADC1;		/* 32 bits    */
 	/* 500Ch */	SKL_IMC_MAD_DIMM	MADD0,		/* 32 bits    */
@@ -630,6 +637,7 @@ typedef struct
 	Bit256			PowerMgmt_Mask	__attribute__ ((aligned (16)));
 	Bit256			SpeedStep_Mask	__attribute__ ((aligned (16)));
 	Bit256			TurboBoost_Mask __attribute__ ((aligned (16)));
+	Bit256			HWP_Mask __attribute__ ((aligned (16)));
 	Bit256			C1E_Mask __attribute__ ((aligned (16)));
 	Bit256	/* NHM */	C3A_Mask __attribute__ ((aligned (16)));
 	Bit256	/* NHM */	C1A_Mask __attribute__ ((aligned (16)));
@@ -637,11 +645,14 @@ typedef struct
 	Bit256	/* SNB */	C1U_Mask __attribute__ ((aligned (16)));
 	Bit256	/* AMD */	CC6_Mask __attribute__ ((aligned (16)));
 	Bit256	/* AMD */	PC6_Mask __attribute__ ((aligned (16)));
+	Bit256			SPEC_CTRL_Mask __attribute__ ((aligned (16)));
+	Bit256			ARCH_CAP_Mask  __attribute__ ((aligned (16)));
 
 	Bit256			ODCM		__attribute__ ((aligned (16)));
 	Bit256			PowerMgmt	__attribute__ ((aligned (16)));
 	Bit256			SpeedStep	__attribute__ ((aligned (16)));
 	Bit256			TurboBoost	__attribute__ ((aligned (16)));
+	Bit256			HWP		__attribute__ ((aligned (16)));
 	Bit256			C1E		__attribute__ ((aligned (16)));
 	Bit256			C3A		__attribute__ ((aligned (16)));
 	Bit256			C1A		__attribute__ ((aligned (16)));
@@ -651,6 +662,17 @@ typedef struct
 	Bit256			PC6		__attribute__ ((aligned (16)));
 	Bit256			SMM		__attribute__ ((aligned (16)));
 	Bit256			VM		__attribute__ ((aligned (16)));
+	Bit256			IBRS		__attribute__ ((aligned (16)));
+	Bit256			STIBP		__attribute__ ((aligned (16)));
+	Bit256			SSBD		__attribute__ ((aligned (16)));
+	Bit256			RDCL_NO 	__attribute__ ((aligned (16)));
+	Bit256			IBRS_ALL	__attribute__ ((aligned (16)));
+	Bit256			RSBA		__attribute__ ((aligned (16)));
+	Bit256			L1DFL_VMENTRY_NO __attribute__ ((aligned (16)));
+	Bit256			SSB_NO		__attribute__ ((aligned (16)));
+	Bit256			MDS_NO		__attribute__ ((aligned (16)));
+	Bit256			PSCHANGE_MC_NO	__attribute__ ((aligned (16)));
+	Bit256			TAA_NO		__attribute__ ((aligned (16)));
 
 	enum THERMAL_FORMULAS	thermalFormula;
 	enum VOLTAGE_FORMULAS	voltageFormula;
@@ -682,10 +704,11 @@ typedef struct
 		unsigned int	Sensor;
 	enum THERM_PWR_EVENTS	Events;
 		RAPL_POWER_UNIT Unit;
+		PKG_POWER_INFO	PowerInfo;
 	} PowerThermal;
 
 	struct {
-		Bit64		Signal __attribute__ ((aligned (8)));
+		Bit64		Signal	__attribute__ ((aligned (8)));
 		struct {
 			size_t	Size;
 			int	Order;
@@ -694,17 +717,12 @@ typedef struct
 	} OS;
 
 	struct {
+		Bit64		NMI;
 		signed int	AutoClock,
 				Experimental,
-				hotplug,
-				pci,
-				nmi;
-		struct {
-		unsigned short
-				cpuidle :  1-0,
-				cpufreq :  2-1,
-				unused	: 16-2;
-		} Driver;
+				HotPlug,
+				PCI;
+		KERNEL_DRIVER	Driver;
 	} Registration;
 
 	enum HYPERVISOR 	HypervisorID;

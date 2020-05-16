@@ -1,6 +1,6 @@
 # CoreFreq
 ## Purpose
-CoreFreq, a CPU monitoring software with BIOS like functionalities, is designed for the 64-bits Processors of architecture Intel Atom, Core2, Nehalem, SandyBridge and superiors; AMD Families 0Fh, 17h (Zen)  
+CoreFreq, a CPU monitoring software with BIOS like functionalities, is designed for the 64-bits Processors of architecture Intel Atom, Core2, Nehalem, SandyBridge and superiors; AMD Families 0Fh ... 17h (Zen), 18h (Hygon Dhyana)  
 
 ![alt text](http://blog.cyring.free.fr/images/CoreFreq_Top.gif "CoreFreq Top")
 
@@ -14,7 +14,7 @@ CoreFreq provides a framework to retrieve CPU data with a high degree of precisi
 * Topology map including Caches for boostrap & application CPU
 * Processor features, brand & architecture strings
 * In progress: Uncore, Memory Controller channels & geometry, DIMM timings,  
-  Stress tools, Power & Energy (RAPL, OSPM, HWP, TDP), Overclocking, cpuidle & cpufreq driver  
+  Stress tools, Power & Energy (RAPL, OSPM, HWP, TDP), Overclocking, cpuidle & cpufreq driver, Mitigation Mechanisms  
 
 
 To reach this goal, CoreFreq implements a Linux Kernel module which employs the followings:
@@ -129,7 +129,7 @@ CoreFreq: Processor [06_1A] Architecture [Nehalem/Bloomfield] CPU [8/8]
 
 ### Daemon
 ```
-CoreFreq Daemon.  Copyright (C) 2015-2019 CYRIL INGENIERIE
+CoreFreq Daemon.  Copyright (C) 2015-2020 CYRIL INGENIERIE
 
   Processor [Intel(R) Core(TM) i7 CPU 920 @ 2.67GHz]
   Architecture [Nehalem/Bloomfield] 8/8 CPU Online.
@@ -294,8 +294,17 @@ parm:           PState_VID:P-State Voltage Id (int)
 parm:           HWP_Enable:Hardware-Controlled Performance States (short)
 parm:           HWP_EPP:Energy Performance Preference (short)
 parm:           Clear_Events:Clear Thermal and Power Events (uint)
+parm:           ThermalScope:[0:None; 1:SMT; 2:Core; 3:Package] (int)
+parm:           VoltageScope:[0:None; 1:SMT; 2:Core; 3:Package] (int)
+parm:           PowerScope:[0:None; 1:SMT; 2:Core; 3:Package] (int)
 parm:           Register_CPU_Idle:Register the Kernel cpuidle driver (short)
+parm:           Register_Governor:Register the Kernel governor (short)
 parm:           Register_CPU_Freq:Register the Kernel cpufreq driver (short)
+parm:           Mech_IBRS:Mitigation Mechanism IBRS (short)
+parm:           Mech_STIBP:Mitigation Mechanism STIBP (short)
+parm:           Mech_SSBD:Mitigation Mechanism SSBD (short)
+parm:           Mech_IBPB:Mitigation Mechanism IBPB (short)
+parm:           Mech_L1D_FLUSH:Mitigation Mechanism Cache L1D Flush (short)
 
 ```
 
@@ -306,5 +315,5 @@ parm:           Register_CPU_Freq:Register the Kernel cpufreq driver (short)
 # About
 [CyrIng](https://github.com/cyring)
 
-Copyright (C) 2015-2019 CYRIL INGENIERIE  
+Copyright (C) 2015-2020 CYRIL INGENIERIE  
  -------

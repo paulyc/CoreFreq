@@ -1,8 +1,29 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
+
+enum {
+	SYNC	=  0,
+	SYNC0	= 10,
+	SYNC1	= 11,
+	BURN	= 31,
+	COMP0	= 40,
+	COMP1	= 41,
+	NTFY0	= 50,
+	NTFY1	= 51,
+	NTFY	= 63
+};
+
+#define BIT_MASK_SYNC							\
+	0b0000000000000000000000000000000000000000000000000000110000000000LLU
+
+#define BIT_MASK_COMP							\
+	0b0000000000000000000000110000000000000000000000000000000000000000LLU
+
+#define BIT_MASK_NTFY							\
+	0b0000000000001100000000000000000000000000000000000000000000000000LLU
 
 #define MAXCOUNTER(M, m)	((M) > (m) ? (M) : (m))
 #define MINCOUNTER(m, M)	((m) < (M) ? (m) : (M))
@@ -12,30 +33,12 @@
 #define CORE_WORD_MOD(_cc_,_offset_) ((_offset_ & CORE_COUNT_MASK(_cc_)) & 0x3f)
 #define CORE_WORD_POS(_cc_,_offset_) ((_offset_ & CORE_COUNT_MASK(_cc_)) >> 6)
 
-typedef volatile unsigned long long int Bit256[4];
-typedef volatile unsigned long long int Bit64;
-typedef volatile unsigned int		Bit32;
+typedef unsigned long long int	Bit256[4];
+typedef unsigned long long int	Bit64;
+typedef unsigned int		Bit32;
 
 #define LOCKLESS " "
 #define BUS_LOCK "lock "
-
-#define RDTSC(_lo, _hi) 						\
-__asm__ volatile							\
-(									\
-	"lfence"		"\n\t"					\
-	"rdtsc" 							\
-	: "=a" (_lo),							\
-	  "=d" (_hi)							\
-)
-
-#define RDTSCP(_lo, _hi, aux)						\
-__asm__ volatile							\
-(									\
-	"rdtscp"							\
-	: "=a" (_lo),							\
-	  "=d" (_hi),							\
-	  "=c" (aux)							\
-)
 
 #define BARRIER(pfx)							\
 __asm__ volatile							\
@@ -43,7 +46,7 @@ __asm__ volatile							\
 	#pfx"fence"							\
 	:								\
 	:								\
-	:								\
+	: "memory"							\
 )
 
 #define WBINVD()							\
@@ -59,13 +62,13 @@ __asm__ volatile							\
 __asm__ volatile							\
 (									\
 	"xorq %%rax,%%rax"	"\n\t"					\
-	"cpuid"								\
+	"cpuid" 							\
 	:								\
 	:								\
-	: "%rax"							\
+	: "%rax", "%rbx", "%rcx", "%rdx"				\
 )
 
-#define RDTSC64(_val64) 						\
+#define RDTSC64(_mem64) 						\
 __asm__ volatile							\
 (									\
 	"lfence"		"\n\t"					\
@@ -73,21 +76,21 @@ __asm__ volatile							\
 	"shlq	$32,	%%rdx"	"\n\t"					\
 	"orq	%%rdx,	%%rax"	"\n\t"					\
 	"movq	%%rax,	%0"						\
-	: "=m" (_val64) 						\
+	: "=m" (_mem64) 						\
 	:								\
-	: "%rax","%rcx","%rdx","memory" 				\
+	: "%rax", "%rcx", "%rdx", "cc", "memory"			\
 )
 
-#define RDTSCP64(_val64)						\
+#define RDTSCP64(_mem64)						\
 __asm__ volatile							\
 (									\
 	"rdtscp"		"\n\t"					\
 	"shlq	$32,	%%rdx"	"\n\t"					\
 	"orq	%%rdx,	%%rax"	"\n\t"					\
 	"movq	%%rax,	%0"						\
-	: "=m" (_val64) 						\
+	: "=m" (_mem64) 						\
 	:								\
-	: "%rax","%rcx","%rdx","memory" 				\
+	: "%rax", "%rcx", "%rdx", "cc", "memory"			\
 )
 
 #define ASM_RDTSCP(_reg)						\
@@ -101,7 +104,7 @@ __asm__ volatile							\
 #define ASM_RDTSC(_reg) 						\
 	"# Read variant TSC."		"\n\t"				\
 	"lfence"			"\n\t"				\
-	"rdtsc"				"\n\t"				\
+	"rdtsc" 			"\n\t"				\
 	"shlq	$32, %%rdx"		"\n\t"				\
 	"orq	%%rdx, %%rax"		"\n\t"				\
 	"# Save TSC value."		"\n\t"				\
@@ -128,7 +131,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg"", 							\
-	  "memory"							\
+	  "cc", "memory"						\
 )
 
 #define ASM_RDTSC_PMCx1(_reg0, _reg1,					\
@@ -145,7 +148,7 @@ __asm__ volatile							\
 	:								\
 	: "%rax", "%rcx", "%rdx",					\
 	  "%" #_reg0"", "%" #_reg1"",					\
-	  "memory"							\
+	  "cc", "memory"						\
 )
 
 #define RDTSC_PMCx1(mem_tsc, ...)					\
@@ -157,46 +160,66 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 
 #define _BITSET_GPR(_lock, _base, _offset)				\
 ({									\
+	volatile unsigned char _ret;					\
+									\
 	__asm__ volatile						\
 	(								\
-	_lock	"btsq	%%rdx, %[base]" 				\
-		: [base] "=m" (_base)					\
+	_lock	"btsq	%%rdx, %[base]" 	"\n\t"			\
+		"setc	%[ret]" 					\
+		: [ret] "+m" (_ret),					\
+		  [base] "=m" (_base)					\
 		: "d" (_offset)						\
 		: "cc", "memory"					\
 	);								\
+	_ret;								\
 })
 
 #define _BITSET_IMM(_lock, _base, _imm8)				\
 ({									\
+	volatile unsigned char _ret;					\
+									\
 	__asm__ volatile						\
 	(								\
-	_lock	"btsq	%[imm8], %[base]"				\
-		: [base] "=m" (_base)					\
+	_lock	"btsq	%[imm8], %[base]"	"\n\t"			\
+		"setc	%[ret]" 					\
+		: [ret] "+m" (_ret),					\
+		  [base] "=m" (_base)					\
 		: [imm8] "i" (_imm8)					\
 		: "cc", "memory"					\
 	);								\
+	_ret;								\
 })
 
 #define _BITCLR_GPR(_lock, _base, _offset)				\
 ({									\
+	volatile unsigned char _ret;					\
+									\
 	__asm__ volatile						\
 	(								\
-	_lock	"btrq	%%rdx,	%[base]"				\
-		: [base] "=m" (_base)					\
+	_lock	"btrq	%%rdx,	%[base]"	"\n\t"			\
+		"setc	%[ret]" 					\
+		: [ret] "+m" (_ret),					\
+		  [base] "=m" (_base)					\
 		: "d" (_offset)						\
 		: "cc", "memory"					\
 	);								\
+	_ret;								\
 })
 
 #define _BITCLR_IMM(_lock, _base, _imm8)				\
 ({									\
+	volatile unsigned char _ret;					\
+									\
 	__asm__ volatile						\
 	(								\
-	_lock	"btrq	%[imm8], %[base]"				\
-		: [base] "=m" (_base)					\
+	_lock	"btrq	%[imm8], %[base]"	"\n\t"			\
+		"setc	%[ret]" 					\
+		: [ret] "+m" (_ret),					\
+		  [base] "=m" (_base)					\
 		: [imm8] "i" (_imm8)					\
 		: "cc", "memory"					\
 	);								\
+	_ret;								\
 })
 
 #define _BITBTC_GPR(_lock,_base, _offset)				\
@@ -289,42 +312,42 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 
 #define _BITWISEAND(_lock, _opl, _opr)					\
 ({									\
-	Bit64 _dest __attribute__ ((aligned (8))) = _opl;		\
+	volatile Bit64 _dest __attribute__ ((aligned (8))) = _opl;	\
 									\
 	__asm__ volatile						\
 	(								\
 	_lock	"andq %[opr], %[dest]"					\
 		: [dest] "=m" (_dest)					\
-		: [opr] "Jmr" (_opr)					\
-		: "memory"						\
+		: [opr]  "Jr" (_opr)					\
+		: "cc", "memory"					\
 	);								\
 	_dest;								\
 })
 
 #define _BITWISEOR(_lock, _opl, _opr)					\
 ({									\
-	Bit64 _dest __attribute__ ((aligned (8))) = _opl;		\
+	volatile Bit64 _dest __attribute__ ((aligned (8))) = _opl;	\
 									\
 	__asm__ volatile						\
 	(								\
 	_lock	"orq %[opr], %[dest]"					\
 		: [dest] "=m" (_dest)					\
-		: [opr] "Jmr" (_opr)					\
-		: "memory"						\
+		: [opr]  "Jr" (_opr)					\
+		: "cc", "memory"					\
 	);								\
 	_dest;								\
 })
 
 #define _BITWISEXOR(_lock, _opl, _opr)					\
 ({									\
-	Bit64 _dest __attribute__ ((aligned (8))) = _opl;		\
+	volatile Bit64 _dest __attribute__ ((aligned (8))) = _opl;	\
 									\
 	__asm__ volatile						\
 	(								\
 	_lock	"xorq %[opr], %[dest]"					\
 		: [dest] "=m" (_dest)					\
-		: [opr] "Jmr" (_opr)					\
-		: "memory"						\
+		: [opr]  "Jr" (_opr)					\
+		: "cc", "memory"					\
 	);								\
 	_dest;								\
 })
@@ -382,7 +405,7 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 		"negq	%[dest]"					\
 		: [dest] "=m" (_dest)					\
 		: [src] "ir" (_src)					\
-		: "memory"						\
+		: "cc", "memory"					\
 	);								\
 	_dest;								\
 })
@@ -400,7 +423,7 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 	_lock	"andq	%%rsi , %[dest]"				\
 		: [dest] "=m" (_dest)					\
 		: [src] "Jmr" (_src)					\
-		: "memory", "%rsi"					\
+		: "cc", "memory", "%rsi"				\
 	);								\
 })
 
@@ -489,9 +512,20 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 		: [src] "irm" (_src),					\
 		  [ofs] "irm" (_offset),				\
 		  [len] "irm" (_length) 				\
-		: "%ecx", "%rdx", "memory"				\
+		: "%ecx", "%rdx", "cc", "memory"			\
 	);								\
 	_dest;								\
+})
+
+#define BITWISESET(_lock, _opl, _opr)					\
+({									\
+	__asm__ volatile						\
+	(								\
+	_lock	"orq	%[opr], %[dest]"				\
+		: [dest] "=m" (_opl)					\
+		: [opr]  "Jr" (_opr)					\
+		: "cc", "memory"					\
+	);								\
 })
 
 #define BITSET_CC(_lock, _base, _offset)				\
@@ -517,7 +551,7 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 
 #define BITWISEAND_CC(_lock, _opl, _opr)				\
 ({									\
-	Bit64 _ret __attribute__ ((aligned (8))) = 0;			\
+	volatile Bit64 _ret __attribute__ ((aligned (8))) = 0;		\
 	unsigned int cw = 0;						\
 	do {								\
 		_ret |= _BITWISEAND(_lock, _opl[cw], _opr[cw]) ;	\
@@ -569,4 +603,81 @@ ASM_RDTSC_PMCx1(r14, r15, ASM_RDTSCP, mem_tsc, __VA_ARGS__)
 									\
 	_ret;								\
 })
+
+/* Micro-benchmark. Prerequisites: CPU affinity, RDTSC[P] optionnaly RDPMC */
+#if defined(UBENCH) && UBENCH == 1
+
+#define UBENCH_DECLARE()						\
+static unsigned long long uBenchCounter[2][4] __attribute__((aligned(8)))=\
+{									\
+/* TSC*/{0,		0,		0,		0},		\
+/*INST*/{0,		0,		0,		0}		\
+/*	[0]DELTA,	[1]PREV,	[2]LAST,	[3]OVERHEAD  */ \
+};									\
+									\
+inline static void UBENCH_RDCOUNTER_VOID(unsigned int idx) {}		\
+									\
+inline static void UBENCH_With_RDTSCP_No_RDPMC(unsigned int idx)	\
+{									\
+	RDTSCP64(uBenchCounter[0][idx]);				\
+}									\
+									\
+inline static void UBENCH_With_RDTSC_No_RDPMC(unsigned int idx) 	\
+{									\
+	RDTSC64(uBenchCounter[0][idx]) ;				\
+}									\
+									\
+inline static void UBENCH_With_RDTSCP_RDPMC(unsigned int idx)		\
+{									\
+	RDTSCP_PMCx1(	uBenchCounter[0][idx],				\
+			0x40000000,					\
+			uBenchCounter[1][idx]) ;			\
+}									\
+									\
+									\
+inline static void UBENCH_With_RDTSC_RDPMC(unsigned int idx)		\
+{									\
+	RDTSC_PMCx1(	uBenchCounter[0][idx],				\
+			0x40000000,					\
+			uBenchCounter[1][idx]) ;			\
+}									\
+									\
+static void (*UBENCH_RDCOUNTER)(unsigned int) = UBENCH_RDCOUNTER_VOID;
+
+#define UBENCH_COMPUTE()						\
+({									\
+	uBenchCounter[0][0] = uBenchCounter[0][2] - uBenchCounter[0][1];\
+	uBenchCounter[1][0] = uBenchCounter[1][2] - uBenchCounter[1][1];\
+	uBenchCounter[0][0] -= uBenchCounter[0][3];			\
+	uBenchCounter[1][0] -= uBenchCounter[1][3];			\
+})
+
+#define UBENCH_METRIC(metric) (uBenchCounter[metric][0])
+
+#define UBENCH_SETUP(withRDTSCP , withRDPMC)				\
+({									\
+	void (*MatrixCallFunc[2][2])(unsigned int) = {			\
+		{UBENCH_With_RDTSC_No_RDPMC, UBENCH_With_RDTSC_RDPMC},	\
+		{UBENCH_With_RDTSCP_No_RDPMC,UBENCH_With_RDTSCP_RDPMC}	\
+	};								\
+	UBENCH_RDCOUNTER = MatrixCallFunc[withRDTSCP][withRDPMC];	\
+									\
+	UBENCH_RDCOUNTER(0);						\
+	UBENCH_RDCOUNTER(3);						\
+									\
+	uBenchCounter[0][0] = uBenchCounter[0][3]- uBenchCounter[0][0]; \
+	uBenchCounter[1][0] = uBenchCounter[1][3]- uBenchCounter[1][0]; \
+	uBenchCounter[0][3] = uBenchCounter[0][0];			\
+	uBenchCounter[1][3] = uBenchCounter[1][0];			\
+})
+
+#else /* UBENCH == 1 */
+
+#define UBENCH_DECLARE()			/* UBENCH_DECLARE()	*/
+#define UBENCH_RDCOUNTER(idx)			/* UBENCH_RDCOUNTER()	*/
+#define UBENCH_COMPUTE()			/* UBENCH_COMPUTE()	*/
+#define UBENCH_METRIC(metric)			/* UBENCH_METRIC()	*/
+#define UBENCH_SETUP(withTSCP , withPMC)	/* UBENCH_SETUP()	*/
+
+#endif /* UBENCH == 1 */
 

@@ -1,5 +1,5 @@
 # CoreFreq
-# Copyright (C) 2015-2019 CYRIL INGENIERIE
+# Copyright (C) 2015-2020 CYRIL INGENIERIE
 # Licenses: GPL2
 
 CC ?= cc
@@ -9,11 +9,13 @@ KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PREFIX ?= /usr
 UBENCH = 0
 FEAT_DBG = 0
+TASK_ORDER = 5
+MAX_FREQ_HZ = 5250000000
 MSR_CORE_PERF_UCC ?= MSR_IA32_APERF
 MSR_CORE_PERF_URC ?= MSR_IA32_MPERF
 
 obj-m := corefreqk.o
-ccflags-y := -D FEAT_DBG=$(FEAT_DBG)
+ccflags-y := -D FEAT_DBG=$(FEAT_DBG) -D TASK_ORDER=$(TASK_ORDER)
 
 ifneq ($(OPTIM_LVL),)
 	OPTIM_FLG = -O$(OPTIM_LVL)
@@ -21,8 +23,15 @@ ifneq ($(OPTIM_LVL),)
 	ccflags-y += $(OPTIM_FLG)
 endif
 
+DEFINITIONS =	-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		-D TASK_ORDER=$(TASK_ORDER) -D MAX_FREQ_HZ=$(MAX_FREQ_HZ)
+
 ccflags-y += -D MSR_CORE_PERF_UCC=$(MSR_CORE_PERF_UCC)
 ccflags-y += -D MSR_CORE_PERF_URC=$(MSR_CORE_PERF_URC)
+
+ifneq ($(HWM_CHIPSET),)
+	ccflags-y += -D HWM_CHIPSET=$(HWM_CHIPSET)
+endif
 
 .PHONY: all
 all: corefreqd corefreq-cli
@@ -45,42 +54,42 @@ clean:
 
 corefreqm.o: corefreqm.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreqm.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreqm.o
 
 corefreqd.o: corefreqd.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -pthread -c corefreqd.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreqd.o
 
 corefreqd: corefreqd.o corefreqm.o
 	$(CC) $(OPTIM_FLG) $(WARNING) corefreqd.c corefreqm.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreqd -lpthread -lm -lrt
 
 corefreq-ui.o: corefreq-ui.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreq-ui.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-ui.o
 
 corefreq-cli.o: corefreq-cli.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreq-cli.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-cli.o
 
 corefreq-cli-rsc.o: corefreq-cli-rsc.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreq-cli-rsc.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-cli-rsc.o
 
 corefreq-cli-json.o: corefreq-cli-json.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreq-cli-json.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-cli-json.o
 
 corefreq-cli-extra.o: corefreq-cli-extra.c
 	$(CC) $(OPTIM_FLG) $(WARNING) -c corefreq-cli-extra.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-cli-extra.o
 
 corefreq-cli: corefreq-cli.o corefreq-ui.o corefreq-cli-rsc.o \
@@ -88,12 +97,12 @@ corefreq-cli: corefreq-cli.o corefreq-ui.o corefreq-cli-rsc.o \
 	$(CC) $(OPTIM_FLG) $(WARNING) \
 		corefreq-cli.c corefreq-ui.c corefreq-cli-rsc.c \
 		corefreq-cli-json.c corefreq-cli-extra.c \
-		-D FEAT_DBG=$(FEAT_DBG) -D UBENCH=$(UBENCH) \
+		$(DEFINITIONS) \
 		-o corefreq-cli -lm -lrt
 
 .PHONY: info
 info:
-	$(info CC [$(CC)])
+	$(info CC [$(shell whereis -b $(CC))])
 	$(info WARNING [$(WARNING)])
 	$(info PWD [$(PWD)])
 	$(info KERNELDIR [$(KERNELDIR)])
@@ -122,16 +131,35 @@ help:
 	"|  UBENCH=<N>                                                   |\n"\
 	"|    where <N> is 0 to disable or 1 to enable micro-benchmark   |\n"\
 	"|                                                               |\n"\
+	"|  TASK_ORDER=<N>                                               |\n"\
+	"|    where <N> is the memory page unit of kernel allocation     |\n"\
+	"|                                                               |\n"\
 	"|  FEAT_DBG=<N>                                                 |\n"\
 	"|    where <N> is 0 or 1 for FEATURE DEBUG level                |\n"\
 	"|                                                               |\n"\
 	"|  OPTIM_LVL=<N>                                                |\n"\
 	"|    where <N> is 0,1,2, or 3 for OPTIMIZATION level            |\n"\
 	"|                                                               |\n"\
-	"|  MSR_CORE_PERF_UCC=<REG>                                      |\n"\
-	"|    where <REG> is MSR_IA32_APERF or MSR_CORE_PERF_FIXED_CTR1  |\n"\
+	"|  MAX_FREQ_HZ=<freq>                                           |\n"\
+	"|    where <freq> is at least 4050000000 Hz                     |\n"\
 	"|                                                               |\n"\
-	"|  MSR_CORE_PERF_URC=<REG>                                      |\n"\
-	"|    where <REG> is MSR_IA32_MPERF or MSR_CORE_PERF_FIXED_CTR2  |\n"\
+	"|  HWM_CHIPSET=<chipset>                                        |\n"\
+	"|    where <chipset> is W83627 or COMPATIBLE                    |\n"\
+	"|                                                               |\n"\
+	"|  Performance Counters:                                        |\n"\
+	"|    -------------------------------------------------------    |\n"\
+	"|   |     MSR_CORE_PERF_UCC     |     MSR_CORE_PERF_URC     |   |\n"\
+	"|   |----------- REG -----------|----------- REG -----------|   |\n"\
+	"|   | MSR_IA32_APERF            |  MSR_IA32_MPERF           |   |\n"\
+	"|   | MSR_CORE_PERF_FIXED_CTR1  |  MSR_CORE_PERF_FIXED_CTR2 |   |\n"\
+	"|   | MSR_PPERF                 |  MSR_PPERF                |   |\n"\
+	"|    -------------------------------------------------------    |\n"\
+	"|                                                               |\n"\
+	"|  Example:                                                     |\n"\
+	"|    make CC=gcc OPTIM_LVL=3 FEAT_DBG=1                         |\n"\
+	"|         MSR_CORE_PERF_UCC=MSR_CORE_PERF_FIXED_CTR1            |\n"\
+	"|         MSR_CORE_PERF_URC=MSR_CORE_PERF_FIXED_CTR2            |\n"\
+	"|         HWM_CHIPSET=W83627 MAX_FREQ_HZ=5350000000             |\n"\
+	"|         clean all                                             |\n"\
 	"o---------------------------------------------------------------o"
 

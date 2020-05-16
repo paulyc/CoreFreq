@@ -1,6 +1,6 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
@@ -54,16 +54,15 @@ typedef struct
 	} Topology;
 
 	struct {
-		THERMAL_PARAM		Param;
 		unsigned int		TM1,
 					TM2,
-					Limit[2];
+					Limit[SENSOR_LIMITS_DIM];
 		struct {
 			unsigned int	ClockMod : 16-0,
 					Extended : 32-16;
 			} DutyCycle;
 		unsigned int		PowerPolicy;
-		struct {
+		struct HWP_STRUCT {
 			struct {
 			unsigned int	Highest,
 					Guaranteed,
@@ -78,6 +77,18 @@ typedef struct
 			} Request;
 		} HWP;
 	} PowerThermal;
+
+	struct {
+		struct {
+			double		Limit[SENSOR_LIMITS_DIM];
+		} Voltage;
+		struct {
+			double		Limit[SENSOR_LIMITS_DIM];
+		} Energy;
+		struct {
+			double		Limit[SENSOR_LIMITS_DIM];
+		} Power;
+	} Sensors;
 
 	struct FLIP_FLOP {
 
@@ -96,6 +107,9 @@ typedef struct
 					C7,
 					TSC,
 					C1;
+			struct {
+		unsigned long long	ACCU;
+			} Power;
 		} Delta __attribute__ ((aligned (8)));
 
 		CLOCK			Clock;
@@ -109,7 +123,9 @@ typedef struct
 					C3,
 					C6,
 					C7,
-					C1;
+					C1,
+					Energy,
+					Power;
 		} State;
 
 		struct {
@@ -121,6 +137,7 @@ typedef struct
 		unsigned int		Sensor,
 					Temp;
 		enum THERM_PWR_EVENTS	Events;
+		THERMAL_PARAM		Param;
 		} Thermal;
 
 		struct {
@@ -137,15 +154,25 @@ typedef struct
 					IOCHECK;
 			} NMI;
 		} Counter;
+
+		struct {
+			unsigned int	Perf,
+					Target;
+		} Ratio;
+
+		struct {
+			double		Perf,
+					Target;
+		} Frequency;
 	} FlipFlop[2];
 
 	struct {
-		Bit64			RFLAGS,
-					CR0,
-					CR3,
-					CR4,
-					EFCR,
-					EFER;
+		Bit64			RFLAGS	__attribute__ ((aligned (8))),
+					CR0	__attribute__ ((aligned (8))),
+					CR3	__attribute__ ((aligned (8))),
+					CR4	__attribute__ ((aligned (8))),
+					EFCR	__attribute__ ((aligned (8))),
+					EFER	__attribute__ ((aligned (8)));
 	} SystemRegister;
 
 	CPUID_STRUCT			CpuID[CPUID_MAX_FUNC];
@@ -193,6 +220,22 @@ typedef struct
 				IOMMU		: 15-14,
 				_pad64		: 64-15;
 	} Technology;
+
+	struct {
+		unsigned long long
+				IBRS		:  2-0,
+				STIBP		:  4-2,
+				SSBD		:  6-4,
+				RDCL_NO 	:  8-6,
+				IBRS_ALL	: 10-8,
+				RSBA		: 12-10,
+				L1DFL_VMENTRY_NO: 14-12,
+				SSB_NO		: 16-14,
+				MDS_NO		: 18-16,
+				PSCHANGE_MC_NO	: 20-18,
+				TAA_NO		: 22-20,
+				_UnusedMechBits : 64-22;
+	} Mechanisms;
 
 	enum THERMAL_FORMULAS	thermalFormula;
 	enum VOLTAGE_FORMULAS	voltageFormula;
@@ -243,9 +286,16 @@ typedef struct
 					PC07,
 					PC08,
 					PC09,
-					PC10,
-					Energy[PWR_DOMAIN(SIZE)],
-					Power[PWR_DOMAIN(SIZE)];
+					PC10;
+		struct {
+			double		Current,
+					Limit[SENSOR_LIMITS_DIM];
+		} Energy[PWR_DOMAIN(SIZE)];
+
+		struct {
+			double		Current,
+					Limit[SENSOR_LIMITS_DIM];
+		} Power[PWR_DOMAIN(SIZE)];
 	} State;
 
 	struct {
@@ -263,6 +313,7 @@ typedef struct
 					Joules,
 					Times;
 		} Unit;
+		unsigned int		TDP, Min, Max;
 	} Power;
 
 	enum HYPERVISOR 		HypervisorID;
@@ -274,18 +325,13 @@ typedef struct
 {
 	FOOTPRINT		FootPrint;
 
-	struct {
+	struct {	/*	NMI bits: 0 is Unregistered; 1 is Registered */
+		Bit64		NMI	__attribute__ ((aligned (8)));
 		signed int	AutoClock, /* 10: Auto, 01: Init, 00: Specs */
 				Experimental,/* 0: Disable, 1: Enable	*/
-				hotplug, /* < 0: Disable, Other: Enable */
-				pci,	/*  < 0: Disable, other: Enable */
-				nmi;	/* <> 0: Failed, == 0: Enable	*/
-		struct {
-		unsigned short
-				cpuidle :  1-0,/* 0: Disable, 1: Enable */
-				cpufreq :  2-1,/* 0: Disable, 1: Enable */
-				unused	: 16-2;
-		} Driver;
+				HotPlug, /* < 0: Disable, Other: Enable */
+				PCI;	/*  < 0: Disable, other: Enable */
+		KERNEL_DRIVER	Driver;
 	} Registration;
 
 	struct {
@@ -330,8 +376,11 @@ typedef struct
 	} Ring[2]; /* [0] Parent ; [1] Child				*/
 
 	char				ShmName[TASK_COMM_LEN];
-	pid_t				AppSvr,
-					AppCli;
+	struct {
+		pid_t			Svr,
+					Cli,
+					GUI;
+	} App;
 
 	struct {
 		unsigned int		Boost[UNCORE_BOOST(SIZE)];
@@ -423,4 +472,14 @@ typedef struct {
 	REASON_CODE _reason = {.no = 0, .ln = 0, .rc = RC_SUCCESS}
 
 #define IS_REASON_SUCCESSFUL(_reason) (_reason.rc == RC_SUCCESS)
+
+#if defined(UBENCH) && UBENCH == 1
+    #define Print_uBenchmark(quiet)					\
+    ({									\
+	if (quiet)							\
+		printf("%llu\t%llu\n",UBENCH_METRIC(0),UBENCH_METRIC(1));\
+    })
+#else
+	#define Print_uBenchmark(quiet) {}
+#endif /* UBENCH */
 

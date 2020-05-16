@@ -1,11 +1,39 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
 #ifndef MSR_SMI_COUNT
 	#define MSR_SMI_COUNT			0x00000034
+#endif
+
+#ifndef MSR_IA32_FEAT_CTL
+	#define MSR_IA32_FEAT_CTL		MSR_IA32_FEATURE_CONTROL
+#endif
+
+#ifndef MSR_IA32_SPEC_CTRL
+	#define MSR_IA32_SPEC_CTRL		0x00000048
+#endif
+
+#ifndef MSR_IA32_PRED_CMD
+	#define MSR_IA32_PRED_CMD		0x00000049
+#endif
+
+#ifndef MSR_IA32_FLUSH_CMD
+	#define MSR_IA32_FLUSH_CMD		0x0000010b
+#endif
+
+#ifndef MSR_IA32_ARCH_CAPABILITIES
+	#define MSR_IA32_ARCH_CAPABILITIES	0x0000010a
+#endif
+
+#ifndef MSR_IA32_CORE_CAPABILITIES
+	#define MSR_IA32_CORE_CAPABILITIES	0x000000cf
+#endif
+
+#ifndef MSR_IA32_TSX_CTRL
+	#define MSR_IA32_TSX_CTRL		0x00000122
 #endif
 
 #ifndef MSR_PLATFORM_INFO
@@ -101,6 +129,10 @@
 
 #ifndef MSR_PKG_PERF_STATUS
 	#define MSR_PKG_PERF_STATUS		0x00000613
+#endif
+
+#ifndef MSR_PKG_POWER_INFO
+	#define MSR_PKG_POWER_INFO		0x00000614
 #endif
 
 #ifndef MSR_DRAM_ENERGY_STATUS
@@ -207,6 +239,10 @@
 	#define MSR_IA32_HWP_REQUEST_PKG	MSR_HWP_REQUEST_PKG
 #endif
 
+#ifndef MSR_HWP_INTERRUPT
+	#define MSR_HWP_INTERRUPT		0x00000773
+#endif
+
 #ifndef MSR_HWP_REQUEST
 	#define MSR_HWP_REQUEST 		0x00000774
 #endif
@@ -269,6 +305,84 @@ typedef union
 		ReservedBits	: 64-3;
 	};
 } FSB_FREQ;
+
+typedef union
+{	/* R/W: bits are defined as SMT or Core scope.			*/
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		IBRS		:  1-0, /* CPUID(EAX=07H,ECX=0):EDX[26] == 1 */
+		STIBP		:  2-1, /* CPUID(EAX=07H,ECX=0):EDX[27] == 1 */
+		SSBD		:  3-2, /* CPUID(EAX=07H,ECX=0):EDX[31] == 1 */
+		ReservedBits	: 64-3;
+	};
+} SPEC_CTRL;
+
+typedef union
+{	/* W/O: on-demand,issue commands that affect the state of predictors.*/
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		IBPB		:  1-0, /* CPUID(EAX=07H,ECX=0):EDX[26] == 1 */
+		ReservedBits	: 64-1;
+	};
+} PRED_CMD;
+
+typedef union
+{	/* W/O: writeback & invalidate the L1 data cache, previous cachelines*/
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		L1D_FLUSH_CMD	:  1-0, /* CPUID(EAX=07H,ECX=0):EDX[28] == 1 */
+		ReservedBits	: 64-1;
+	};
+} FLUSH_CMD;
+
+typedef union
+{	/* R/O && CPUID.(EAX=07H,ECX=0):EDX[29] == 1			*/
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		RDCL_NO 	:  1-0,
+		IBRS_ALL	:  2-1,
+		RSBA		:  3-2,
+		L1DFL_VMENTRY_NO:  4-3,
+		SSB_NO		:  5-4,
+		MDS_NO		:  6-5,
+		PSCHANGE_MC_NO	:  7-6,
+		TSX_CTRL	:  8-7,
+		TAA_NO		:  9-8,
+		ReservedBits	: 64-9;
+	};
+} ARCH_CAPABILITIES;
+
+typedef union
+{	/* 06_86 [TREMONT]						*/
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		ReservedBits1	:  5-0,
+		SPLA_EXCEPTION	:  6-5, /*Exception for split locked accesses*/
+		ReservedBits2	: 64-6;
+	};
+} CORE_CAPABILITIES;
+
+typedef union
+{
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		RTM_DISABLE	:  1-0, /*1:XBEGIN aborts w/ EAX=0	*/
+		TSX_CPUID_CLEAR :  2-1, /*0:if TSX capable then RTM=0 & HLE=0*/
+		ReservedBits	: 64-2;
+	};
+} TSX_CTRL;
 
 typedef union
 {	/* MSR IA32_PERF_STATUS(0x198): 0F_03 [NetBurst]		*/
@@ -343,19 +457,26 @@ typedef union
 		unsigned long long
 		ReservedBits1	:  8-0,
 		MaxNonTurboRatio: 16-8,
-		ReservedBits2	: 28-16,
+		ReservedBits2	: 23-16, /* Bit[16]=1 in Westmere ?	*/
+		PPIN_CAP	: 24-23, /* R/O:IVB-E,BDW-E,SKL-S : MSR_PPIN */
+		ReservedBits3	: 28-24,
 		ProgrammableTurbo:29-28, /* Phi,SKL,BDW,HSW,IVB,SNB,NHM,GLM */
 		ProgrammableTDP : 30-29,
 		ProgrammableTj	: 31-30, /* R/O: 1 = TjOffset is writable */
-		ReservedBits3	: 32-31,
+		ReservedBits4	: 32-31,
 		LowPowerMode	: 33-32, /* R/O: 1 = LPM is supported.	*/
 		ConfigTDPlevels : 35-33, /* Ivy Bridge, Haswell(-E), Phy */
-		ReservedBits4	: 40-35,
+		ReservedBits5	: 40-35,
 		MinimumRatio	: 48-40, /* Phi,SKL,BDW,HSW,IVB,SNB,NHM,GLM */
 		MinOperatRatio	: 56-48, /* Ivy Bridge, Haswell(-E)	*/
-		ReservedBits5	: 64-56;
+		ReservedBits6	: 64-56;
 	};
 } PLATFORM_INFO;
+/*
+	MSR_PLATFORM_INFO[0xCE:30] : Programmable TJ OFFSET : R/O : Package
+	06_5Ch [Atom_Goldmont], 06_3Eh [IvyBridge_EP], 06_4Fh [Broadwell_EP],
+	06_56h [Broadwell_D], 06_55h [Skylake_X], 06_57h [Xeon_Phi], 06_85h
+*/
 
 typedef union
 {
@@ -672,7 +793,7 @@ typedef union
 	{
 		unsigned long long
 		HWP_Enable	:  1-0,  /* Pkg: R/W-Once; 1=Enable	*/
-		ReservedBits	: 64-1;
+		ReservedBits	: 64-1;  /* **Must be zero**		*/
 	};
 } PM_ENABLE;
 
@@ -686,9 +807,23 @@ typedef union
 		Guaranteed	: 16-8,
 		Most_Efficient	: 24-16,
 		Lowest		: 32-24,
-		ReservedBits	: 64-32;
+		ReservedBits	: 64-32; /* **Must be zero**		*/
 	};
 } HWP_CAPABILITIES;	/* SMT: If CPUID.06H:EAX.[7] = 1		*/
+
+typedef union
+{
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		EN_Guarantee_Chg:  1-0,
+		EN_Excursion_Min:  2-1,
+		EN_Highest_Chg	:  3-2,
+		EN_PECI_OVERRIDE:  4-3,  /* If CPUID[6].EAX[16] = 1	*/
+		ReservedBits	: 64-4;  /* **Must be zero**		*/
+	};
+} HWP_INTERRUPT; /* SMT[SKL,KBL,CFL,CNL] If CPUID.06H:EAX.[8] = 1	*/
 
 typedef union
 {	/* 06_4E/06_4F/06_5E/06_55/06_56/06_66/06_8E/06_9E		*/
@@ -722,7 +857,7 @@ typedef union
 	{
 		unsigned long long
 		HDC_Enable	:  1-0,  /* Pkg: R/W; 1=Enable		*/
-		ReservedBits	: 64-1;
+		ReservedBits	: 64-1;  /* **Must be zero**		*/
 	};
 } HDC_CONTROL;
 
@@ -1086,6 +1221,23 @@ typedef union
 		ReservedBits3	: 64-20;
 	};
 } RAPL_POWER_UNIT;
+
+typedef union
+{
+	unsigned long long	value;
+	struct
+	{
+		unsigned long long
+		ThermalSpecPower: 15-0,
+		ReservedBits1	: 16-15,
+		MinimumPower	: 31-16,
+		ReservedBits2	: 32-31,
+		MaximumPower	: 47-32,
+		ReservedBits3	: 48-47,
+		MaxTimeWindow	: 55-48,
+		ReservedBits4	: 64-55;
+	};
+} PKG_POWER_INFO;
 
 /* TODO
 typedef struct
@@ -1784,7 +1936,7 @@ typedef union
 		ReservedBits1	:  4-3,
 		Slow_Mode	:  5-4,
 		ReservedBits2	: 32-5;
-	} IVB_EP;
+	} IVB_EP; /*TODO( was first defined in SNB_EP as QPIMISCSTAT )	*/
 } QPI_FREQUENCY;
 
 
@@ -2256,6 +2408,20 @@ typedef union
 } SKL_IMC_REFRESH_TC;	/* Refresh timing parameters			*/
 
 typedef union
+{	/* Device: 0 - Function: 0 - Offset 5000h			*/
+	unsigned int		value;
+	struct {
+		unsigned int
+		DDR_TYPE	:  2-0,  /* 00:DDR4, 01:DDR3, 10:LPDDR3 */
+		ReservedBits1	:  4-2,
+		CH_L_MAP	:  5-4,  /* 0:Channel0 , 1:Channel1	*/
+		ReservedBits2	: 12-5,
+		CH_S_SIZE	: 19-12,/*Channel S size in multiplies of 1GB*/
+		ReservedBits3	: 32-19;
+	};
+} SKL_IMC_MAD_MAPPING;
+
+typedef union
 {	/* Device: 0 - Function: 0 - Offset Channel0: 5004h & Channel1: 5008h */
 	unsigned int		value;
 	struct {
@@ -2363,3 +2529,4 @@ typedef union
 		ReservedBits2	: 32-20;
 	};
 } SKL_CAPID_C;	/* §3.41 CAPID0_C Capabilities C Register		*/
+

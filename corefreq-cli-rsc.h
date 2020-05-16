@@ -1,6 +1,6 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
@@ -11,23 +11,25 @@ enum {
 	RSC_LAYOUT_HEADER_CACHE_L1,
 	RSC_LAYOUT_HEADER_BCLK,
 	RSC_LAYOUT_HEADER_CACHES,
-	RSC_LAYOUT_RULLER_LOAD,
+	RSC_LAYOUT_RULER_LOAD,
+	RSC_LAYOUT_RULER_REL_LOAD,
+	RSC_LAYOUT_RULER_ABS_LOAD,
 	RSC_LAYOUT_MONITOR_FREQUENCY,
 	RSC_LAYOUT_MONITOR_INST,
 	RSC_LAYOUT_MONITOR_COMMON,
 	RSC_LAYOUT_MONITOR_TASKS,
 	RSC_LAYOUT_MONITOR_SLICE,
-	RSC_LAYOUT_RULLER_FREQUENCY,
-	RSC_LAYOUT_RULLER_FREQUENCY_AVG,
-	RSC_LAYOUT_RULLER_FREQUENCY_PKG,
-	RSC_LAYOUT_RULLER_INST,
-	RSC_LAYOUT_RULLER_CYCLES,
-	RSC_LAYOUT_RULLER_CSTATES,
-	RSC_LAYOUT_RULLER_INTERRUPTS,
-	RSC_LAYOUT_RULLER_PACKAGE,
+	RSC_LAYOUT_RULER_FREQUENCY,
+	RSC_LAYOUT_RULER_FREQUENCY_AVG,
+	RSC_LAYOUT_RULER_FREQUENCY_PKG,
+	RSC_LAYOUT_RULER_INST,
+	RSC_LAYOUT_RULER_CYCLES,
+	RSC_LAYOUT_RULER_CSTATES,
+	RSC_LAYOUT_RULER_INTERRUPTS,
+	RSC_LAYOUT_RULER_PACKAGE,
 	RSC_LAYOUT_PACKAGE_PC,
 	RSC_LAYOUT_PACKAGE_UNCORE,
-	RSC_LAYOUT_RULLER_TASKS,
+	RSC_LAYOUT_RULER_TASKS,
 	RSC_LAYOUT_TASKS_TRACKING,
 	RSC_LAYOUT_TASKS_STATE_SORTED,
 	RSC_LAYOUT_TASKS_RUNTIME_SORTED,
@@ -40,13 +42,11 @@ enum {
 	RSC_LAYOUT_TASKS_VALUE_SWITCH,
 	RSC_LAYOUT_TASKS_VALUE_OFF,
 	RSC_LAYOUT_TASKS_VALUE_ON,
-	RSC_LAYOUT_RULLER_VOLTAGE,
-	RSC_LAYOUT_DOMAIN_PACKAGE,
-	RSC_LAYOUT_DOMAIN_CORES,
-	RSC_LAYOUT_DOMAIN_UNCORE,
-	RSC_LAYOUT_DOMAIN_MEMORY,
-	RSC_LAYOUT_POWER_MONITOR,
-	RSC_LAYOUT_RULLER_SLICE,
+	RSC_LAYOUT_RULER_SENSORS,
+	RSC_LAYOUT_RULER_POWER,
+	RSC_LAYOUT_RULER_VOLTAGE,
+	RSC_LAYOUT_RULER_ENERGY,
+	RSC_LAYOUT_RULER_SLICE,
 	RSC_LAYOUT_FOOTER_TECH_X86,
 	RSC_LAYOUT_FOOTER_TECH_INTEL,
 	RSC_LAYOUT_FOOTER_TECH_AMD,
@@ -104,18 +104,22 @@ enum {
 	RSC_SYSINFO_FEATURES_COND0,
 	RSC_SYSINFO_FEATURES_COND1,
 	RSC_SYSINFO_FEATURES_COND2,
+	RSC_SYSINFO_FEATURES_COND3,
+	RSC_SYSINFO_FEATURES_COND4,
 	RSC_SYSINFO_TECH_COND0,
 	RSC_SYSINFO_TECH_COND1,
 	RSC_SYSINFO_PERFMON_COND0,
 	RSC_SYSINFO_PERFMON_COND1,
 	RSC_SYSINFO_PERFMON_COND2,
 	RSC_SYSINFO_PERFMON_COND3,
+	RSC_SYSINFO_PERFMON_COND4,
 	RSC_SYSINFO_PERFMON_HWP_CAP_COND0,
 	RSC_SYSINFO_PERFMON_HWP_CAP_COND1,
 	RSC_SYSINFO_PWR_THERMAL_COND0,
 	RSC_SYSINFO_PWR_THERMAL_COND1,
 	RSC_SYSINFO_PWR_THERMAL_COND2,
 	RSC_SYSINFO_PWR_THERMAL_COND3,
+	RSC_SYSINFO_PWR_THERMAL_COND4,
 	RSC_SYSINFO_KERNEL,
 	RSC_TOPOLOGY_COND0,
 	RSC_TOPOLOGY_COND1,
@@ -146,6 +150,9 @@ enum {
 	RSC_BOX_EVENT,
 	RSC_CREATE_RECORDER,
 	RSC_SMBIOS_ITEM,
+	RSC_CREATE_SELECT_FREQ_PKG,
+	RSC_CREATE_SELECT_FREQ_COND0,
+	RSC_CREATE_SELECT_FREQ_COND1,
 /* ASCII */
 	RSC_PROCESSOR_TITLE,
 	RSC_PROCESSOR,
@@ -175,12 +182,18 @@ enum {
 	RSC_EFFICIENT,
 	RSC_GUARANTEED,
 	RSC_HIGHEST,
+	RSC_SCOPE_NONE,
+	RSC_SCOPE_THREAD,
+	RSC_SCOPE_CORE,
+	RSC_SCOPE_PACKAGE,
 	RSC_CPUID_TITLE,
 	RSC_LARGEST_STD_FUNC,
 	RSC_LARGEST_EXT_FUNC,
 	RSC_SYS_REGS_TITLE,
 	RSC_ISA_TITLE,
 	RSC_FEATURES_TITLE,
+	RSC_NOT_AVAILABLE,
+	RSC_AUTOMATIC,
 	RSC_MISSING,
 	RSC_PRESENT,
 	RSC_VARIANT,
@@ -218,6 +231,7 @@ enum {
 	RSC_FEATURES_RTM,
 	RSC_FEATURES_SMX,
 	RSC_FEATURES_SELF_SNOOP,
+	RSC_FEATURES_SMEP,
 	RSC_FEATURES_TSC,
 	RSC_FEATURES_TSC_DEADLN,
 	RSC_FEATURES_VME,
@@ -226,6 +240,7 @@ enum {
 	RSC_FEATURES_XD_BIT,
 	RSC_FEATURES_XSAVE,
 	RSC_FEATURES_XTPR,
+	RSC_FEAT_SECTION_MECH,
 	RSC_TECHNOLOGIES_TITLE,
 	RSC_TECHNOLOGIES_SMM,
 	RSC_TECHNOLOGIES_HTT,
@@ -288,6 +303,9 @@ enum {
 	RSC_POWER_THERMAL_WATT,
 	RSC_POWER_THERMAL_JOULE,
 	RSC_POWER_THERMAL_SECOND,
+	RSC_POWER_THERMAL_TDP,
+	RSC_POWER_THERMAL_MIN,
+	RSC_POWER_THERMAL_MAX,
 	RSC_KERNEL_TITLE,
 	RSC_KERNEL_TOTAL_RAM,
 	RSC_KERNEL_SHARED_RAM,
@@ -380,7 +398,9 @@ enum {
 	RSC_MENU_ITEM_PKG_CYCLES,
 	RSC_MENU_ITEM_TASKS_MON,
 	RSC_MENU_ITEM_SYS_INTER,
-	RSC_MENU_ITEM_POW_VOLT,
+	RSC_MENU_ITEM_SENSORS,
+	RSC_MENU_ITEM_VOLTAGE,
+	RSC_MENU_ITEM_POWER,
 	RSC_MENU_ITEM_SLICE_CTRS,
 	RSC_MENU_ITEM_PROCESSOR,
 	RSC_MENU_ITEM_TOPOLOGY,
@@ -403,6 +423,10 @@ enum {
 	RSC_SETTINGS_NMI_REGISTERED,
 	RSC_SETTINGS_CPUIDLE_REGISTERED,
 	RSC_SETTINGS_CPUFREQ_REGISTERED,
+	RSC_SETTINGS_GOVERNOR_REGISTERED,
+	RSC_SETTINGS_THERMAL_SCOPE,
+	RSC_SETTINGS_VOLTAGE_SCOPE,
+	RSC_SETTINGS_POWER_SCOPE,
 	RSC_HELP_TITLE,
 	RSC_HELP_KEY_ESCAPE,
 	RSC_HELP_KEY_SHIFT_TAB,
@@ -423,6 +447,7 @@ enum {
 	RSC_HELP_PREV_WINDOW,
 	RSC_HELP_NEXT_WINDOW,
 	RSC_HELP_MOVE_WINDOW,
+	RSC_HELP_SIZE_WINDOW,
 	RSC_HELP_MOVE_SELECT,
 	RSC_HELP_LAST_CELL,
 	RSC_HELP_FIRST_CELL,
@@ -432,20 +457,22 @@ enum {
 	RSC_HELP_SCROLL_DOWN,
 	RSC_HELP_SCROLL_UP,
 	RSC_ADV_HELP_TITLE,
-	RSC_ADV_HELP_ITEM_1,
-	RSC_ADV_HELP_ITEM_2,
-	RSC_ADV_HELP_ITEM_3,
-	RSC_ADV_HELP_ITEM_4,
-	RSC_ADV_HELP_ITEM_5,
-	RSC_ADV_HELP_ITEM_6,
-	RSC_ADV_HELP_ITEM_7,
-	RSC_ADV_HELP_ITEM_8,
-	RSC_ADV_HELP_ITEM_9,
-	RSC_ADV_HELP_ITEM_10,
-	RSC_ADV_HELP_ITEM_11,
-	RSC_ADV_HELP_ITEM_12,
-	RSC_ADV_HELP_ITEM_13,
-	RSC_ADV_HELP_ITEM_14,
+	RSC_ADV_HELP_SECT_FREQ,
+	RSC_ADV_HELP_ITEM_AVG,
+	RSC_ADV_HELP_SECT_TASK,
+	RSC_ADV_HELP_ITEM_ORDER,
+	RSC_ADV_HELP_ITEM_SEL,
+	RSC_ADV_HELP_ITEM_REV,
+	RSC_ADV_HELP_ITEM_HIDE,
+	RSC_ADV_HELP_SECT_ANY,
+	RSC_ADV_HELP_ITEM_POWER,
+	RSC_ADV_HELP_ITEM_TOP,
+	RSC_ADV_HELP_ITEM_UPD,
+	RSC_ADV_HELP_ITEM_START,
+	RSC_ADV_HELP_ITEM_STOP,
+	RSC_ADV_HELP_ITEM_TOOLS,
+	RSC_ADV_HELP_ITEM_GO_UP,
+	RSC_ADV_HELP_ITEM_GO_DW,
 	RSC_ADV_HELP_ITEM_TERMINAL,
 	RSC_ADV_HELP_ITEM_PRT_SCR,
 	RSC_ADV_HELP_ITEM_REC_SCR,
@@ -456,6 +483,7 @@ enum {
 	RSC_RATIO_CLOCK_TITLE,
 	RSC_UNCORE_CLOCK_TITLE,
 	RSC_SELECT_CPU_TITLE,
+	RSC_SELECT_FREQ_TITLE,
 	RSC_BOX_DISABLE_COND0,
 	RSC_BOX_DISABLE_COND1,
 	RSC_BOX_ENABLE_COND0,
@@ -488,17 +516,17 @@ enum {
 	RSC_BOX_EVENT_THERMAL_SENSOR,
 	RSC_BOX_EVENT_PROCHOT_AGENT,
 	RSC_BOX_EVENT_CRITICAL_TEMP,
-	RSC_BOX_EVENT_THERMAL_THRESHOLD,
-	RSC_BOX_EVENT_POWER_LIMITATION,
-	RSC_BOX_EVENT_CURRENT_LIMITATION,
-	RSC_BOX_EVENT_CROSS_DOMAIN_LIMIT,
-	RSC_BOX_PACKAGE_STATE_LIMIT_TITLE,
+	RSC_BOX_EVENT_THERM_THRESHOLD,
+	RSC_BOX_EVENT_POWER_LIMIT,
+	RSC_BOX_EVENT_CURRENT_LIMIT,
+	RSC_BOX_EVENT_CROSS_DOM_LIMIT,
+	RSC_BOX_PKG_STATE_LIMIT_TITLE,
 	RSC_BOX_IO_MWAIT_TITLE,
 	RSC_BOX_IO_MWAIT_DESC,
 	RSC_BOX_MWAIT_MAX_STATE_TITLE,
 	RSC_BOX_ODCM_TITLE,
 	RSC_BOX_ODCM_DESC,
-	RSC_BOX_EXTENDED_DUTY_CYCLE_TITLE,
+	RSC_BOX_EXT_DUTY_CYCLE_TITLE,
 	RSC_BOX_DUTY_CYCLE_TITLE,
 	RSC_BOX_DUTY_CYCLE_RESERVED,
 	RSC_BOX_POWER_POLICY_TITLE,
@@ -526,17 +554,52 @@ enum {
 	RSC_BOX_LANG_TITLE,
 	RSC_BOX_LANG_ENGLISH,
 	RSC_BOX_LANG_FRENCH,
+	RSC_BOX_SCOPE_THERMAL_TITLE,
+	RSC_BOX_SCOPE_VOLTAGE_TITLE,
+	RSC_BOX_SCOPE_POWER_TITLE,
+	RSC_BOX_SCOPE_NONE,
+	RSC_BOX_SCOPE_THREAD,
+	RSC_BOX_SCOPE_CORE,
+	RSC_BOX_SCOPE_PACKAGE,
 	RSC_ERROR_CMD_SYNTAX,
 	RSC_ERROR_SHARED_MEM,
 	RSC_ERROR_SYS_CALL,
 	RSC_BOX_IDLE_LIMIT_TITLE,
 	RSC_BOX_RECORDER_TITLE,
-	RSC_SMBIOS_TITLE
+	RSC_SMBIOS_TITLE,
+	RSC_MECH_IBRS,
+	RSC_MECH_IBPB,
+	RSC_MECH_STIBP,
+	RSC_MECH_SSBD,
+	RSC_MECH_L1D_FLUSH,
+	RSC_MECH_MD_CLEAR,
+	RSC_MECH_RDCL_NO,
+	RSC_MECH_IBRS_ALL,
+	RSC_MECH_RSBA,
+	RSC_MECH_L1DFL_VMENTRY_NO,
+	RSC_MECH_SSB_NO,
+	RSC_MECH_MDS_NO,
+	RSC_MECH_PSCHANGE_MC_NO,
+	RSC_MECH_TAA_NO,
+	RSC_LOGO_ROW_0,
+	RSC_LOGO_ROW_1,
+	RSC_LOGO_ROW_2,
+	RSC_LOGO_ROW_3,
+	RSC_LOGO_ROW_4,
+	RSC_LOGO_ROW_5,
+	RSC_COPY_ROW_0,
+	RSC_COPY_ROW_1,
+	RSC_COPY_ROW_2,
+	RSC_CREATE_SELECT_FREQ_TGT,
+	RSC_CREATE_SELECT_FREQ_HWP_TGT,
+	RSC_CREATE_SELECT_FREQ_HWP_MAX,
+	RSC_CREATE_SELECT_FREQ_HWP_MIN
 };
 
 typedef struct {
-	ATTRIBUTE *Attr;
-	ASCII	  *Code[LOC_CNT];
+	ATTRIBUTE	*Attr;
+	ASCII		*Code[LOC_CNT];
+	const int	Size[LOC_CNT];
 } RESOURCE_ST;
 
 extern RESOURCE_ST Resource[];
@@ -547,7 +610,7 @@ extern RESOURCE_ST Resource[];
 
 #define RSC(_ID) (Resource[RSC_##_ID])
 
-#define RSZ(_ID) (strlen((char *) RSC(_ID).CODE()))
+#define RSZ(_ID) (RSC(_ID).Size[GET_LOCALE()])
 
 #define RSC_RUN_STATE_COLOR_ATTR		\
 {						\
@@ -619,12 +682,12 @@ extern RESOURCE_ST Resource[];
 
 #define RSC_LAYOUT_HEADER_CPU_ATTR					\
 {									\
-	HDK,HWK,HWK,HWK,HDK,HWK,HWK,HWK,LWK,LWK,LWK			\
+	HDK,HWK,HWK,HWK,HWK,HDK,HWK,HWK,HWK,HWK,LWK,LWK,LWK		\
 }
 
 #define RSC_LAYOUT_HEADER_CPU_CODE					\
 {									\
-	']',' ',' ',' ','/',' ',' ',' ','C','P','U'			\
+	']',' ',' ',' ',' ','/',' ',' ',' ',' ','C','P','U'		\
 }
 
 #define RSC_LAYOUT_HEADER_ARCH_ATTR					\
@@ -669,9 +732,9 @@ extern RESOURCE_ST Resource[];
 	'L','3','=',' ',' ',' ',' ',' ',' ','K','B'			\
 }
 
-#define RSC_LAYOUT_RULLER_LOAD_ATTR					\
+#define RSC_LAYOUT_RULER_LOAD_ATTR					\
 {									\
-	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,_HCK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -693,10 +756,16 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_RULLER_LOAD_CODE					\
+#define RSC_LAYOUT_RULER_VAR_LOAD_ATTR					\
 {									\
-	'-','-','-',' ','R','a','t','i','o',' ','-','-','-','-','-','-',\
-	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK 							\
+}
+
+#define RSC_LAYOUT_RULER_LOAD_CODE					\
+{									\
+	'-','-','-',' ', '!',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',\
+	' ',' ',' ',' ',' ',' ',' ',' ',' ','-','-','-','-','-','-','-',\
 	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
 	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
 	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
@@ -741,7 +810,7 @@ extern RESOURCE_ST Resource[];
 	HWK,HWK,HDK,LWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,\
 	HWK,HWK,HWK,HWK,HWK,HDK,LWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,\
 	HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HDK,LWK,HWK,HWK,HWK,HWK,HWK,HWK,\
-	HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK			\
+	HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK 		\
 }
 
 #define RSC_LAYOUT_MONITOR_INST_CODE					\
@@ -839,7 +908,7 @@ extern RESOURCE_ST Resource[];
 	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '	\
 }
 
-#define RSC_LAYOUT_RULLER_FREQUENCY_ATTR				\
+#define RSC_LAYOUT_RULER_FREQUENCY_ATTR 				\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -863,15 +932,31 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_RULLER_FREQUENCY_CODE				\
-	"--- Freq(MHz) Ratio - Turbo --- C0 ---- C1 ---- C3 ---- C6 -"	\
-	"--- C7 --Min TMP Max ---------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"--------------------"
+#define RSC_LAYOUT_RULER_FREQUENCY_CODE 				\
+{									\
+	'-','-','-',' ','F','r','e','q','(','M','H','z',')',' ','R','a',\
+	't','i','o',' ','-',' ','T','u','r','b','o',' ','-','-','-',' ',\
+	'C','0',' ','-','-','-','-',' ','C','1',' ','-','-','-','-',' ',\
+	'C','3',' ','-','-','-','-',' ','C','6',' ','-','-','-','-',' ',\
+	'C','7',' ','-','-','M','i','n',' ','T','M','P',' ','M','a','x',\
+	' ','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
+}
 
-#define RSC_LAYOUT_RULLER_FREQUENCY_AVG_ATTR				\
+#define RSC_LAYOUT_RULER_FREQUENCY_AVG_ATTR				\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,_HCK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,HDK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -895,7 +980,7 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_RULLER_FREQUENCY_PKG_ATTR				\
+#define RSC_LAYOUT_RULER_FREQUENCY_PKG_ATTR				\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,_HCK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -919,7 +1004,7 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_RULLER_FREQUENCY_PKG_CODE				\
+#define RSC_LAYOUT_RULER_FREQUENCY_PKG_CODE				\
 {									\
 	'-','-','-','-','-',' ','%',' ','P','k','g',' ',' ',' ',' ',' ',\
 	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',\
@@ -943,31 +1028,79 @@ extern RESOURCE_ST Resource[];
 	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
 }
 
-#define RSC_LAYOUT_RULLER_INST_CODE					\
-	"------------ IPS -------------- IPC -------------- CPI -----"	\
-	"------------- INST -----------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"--------------------"
+#define RSC_LAYOUT_RULER_INST_CODE					\
+{									\
+	'-','-','-','-','-','-','-','-','-','-','-','-',' ','I','P','S',\
+	' ','-','-','-','-','-','-','-','-','-','-','-','-','-','-',' ',\
+	'I','P','C',' ','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-',' ','C','P','I',' ','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-',' ','I','N','S','T',' ','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
+}
 
-#define RSC_LAYOUT_RULLER_CYCLES_CODE					\
-	"-------------- C0:UCC ---------- C0:URC ------------ C1 ----"	\
-	"--------- TSC ----------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"--------------------"
+#define RSC_LAYOUT_RULER_CYCLES_CODE					\
+{									\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-',' ','C',\
+	'0',':','U','C','C',' ','-','-','-','-','-','-','-','-','-','-',\
+	' ','C','0',':','U','R','C',' ','-','-','-','-','-','-','-','-',\
+	'-','-','-','-',' ','C','1',' ','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-',' ','T','S','C',' ','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
+}
 
-#define RSC_LAYOUT_RULLER_CSTATES_CODE					\
-	"---------------- C1 -------------- C3 -------------- C6 ----"	\
-	"---------- C7 ----------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"--------------------"
+#define RSC_LAYOUT_RULER_CSTATES_CODE					\
+{									\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	' ','C','1',' ','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-',' ','C','3',' ','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-',' ','C','6',' ','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-',' ','C','7',' ','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
+}
 
-#define RSC_LAYOUT_RULLER_INTERRUPTS_ATTR				\
+#define RSC_LAYOUT_RULER_INTERRUPTS_ATTR				\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,\
@@ -991,13 +1124,29 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_RULLER_INTERRUPTS_CODE				\
-	"---------- SMI ------------ NMI[ LOCAL   UNKNOWN  PCI_SERR# "	\
-	" IO_CHECK] -------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"------------------------------------------------------------"	\
-	"--------------------"
+#define RSC_LAYOUT_RULER_INTERRUPTS_CODE				\
+{									\
+	'-','-','-','-','-','-','-','-','-','-',' ','S','M','I',' ','-',\
+	'-','-','-','-','-','-','-','-','-','-','-',' ','N','M','I','[',\
+	' ','L','O','C','A','L',' ',' ',' ','U','N','K','N','O','W','N',\
+	' ',' ','P','C','I','_','S','E','R','R','#',' ',' ','I','O','_',\
+	'C','H','E','C','K',']',' ','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-',\
+	'-','-','-','-','-','-','-','-','-','-','-','-','-','-','-','-' \
+}
 
 #define RSC_LAYOUT_PACKAGE_PC_ATTR					\
 {									\
@@ -1095,7 +1244,7 @@ extern RESOURCE_ST Resource[];
 	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' \
 }
 
-#define RSC_LAYOUT_RULLER_TASKS_ATTR					\
+#define RSC_LAYOUT_RULER_TASKS_ATTR					\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LDK,LDK,LDK,LDK,LDK,LDK,LDK,LDK,LDK,\
@@ -1196,13 +1345,13 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,HDK,LWK						\
 }
 
-#define RSC_LAYOUT_RULLER_VOLTAGE_ATTR					\
+#define RSC_LAYOUT_RULER_SENSORS_ATTR					\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,\
+	LWK,HDK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,HDK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,HDK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
-	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
-	LWK,LWK,LWK,LWK,LWK,HDK,LWK,HDK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
-	LWK,LWK,LWK,LWK,HDK,LWK,HDK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -1220,17 +1369,79 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_POWER_MONITOR_ATTR					\
+#define RSC_LAYOUT_RULER_POWER_ATTR					\
 {									\
-	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
-	HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,		\
-	LWK,LWK,LWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK \
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,\
+	HWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,HWK,HWK,HWK,HWK,\
+	HWK,HWK,HWK,HWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,\
+	HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,HDK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HWK,HDK,LWK,HDK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
 }
 
-#define RSC_LAYOUT_POWER_MONITOR_CODE					\
-	"                                       "
+#define RSC_LAYOUT_RULER_VOLTAGE_ATTR					\
+{									\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
+}
 
-#define RSC_LAYOUT_RULLER_SLICE_ATTR					\
+#define RSC_LAYOUT_RULER_ENERGY_ATTR					\
+{									\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
+}
+
+#define RSC_LAYOUT_RULER_SLICE_ATTR					\
 {									\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,HDK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
@@ -1598,6 +1809,30 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LCK,LCK,LCK,LCK,LCK,LCK,LCK,			\
+	LWK,LWK 							\
+}
+
+#define RSC_SYSINFO_FEATURES_COND3_ATTR 				\
+{									\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,HGK,HGK,HGK,HGK,HGK,HGK,HGK,			\
+	LWK,LWK 							\
+}
+
+#define RSC_SYSINFO_FEATURES_COND4_ATTR 				\
+{									\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
 	LWK,HGK,HGK,HGK,HGK,HGK,HGK,HGK,HGK,HGK,			\
 	LWK,LWK 							\
 }
@@ -1668,6 +1903,18 @@ extern RESOURCE_ST Resource[];
 	HGK,HGK,LWK,LWK 						\
 }
 
+#define RSC_SYSINFO_PERFMON_COND4_ATTR					\
+{									\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK 						\
+}
+
 #define RSC_SYSINFO_PERFMON_HWP_CAP_COND0_ATTR				\
 {									\
 	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,\
@@ -1720,6 +1967,15 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,			\
 	LWK,HGK,HGK,HGK,HGK,HGK,HGK,HGK,LWK,LWK 			\
+}
+
+#define RSC_SYSINFO_PWR_THERMAL_COND4_ATTR				\
+{									\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,			\
+	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK 			\
 }
 
 #define RSC_SYSINFO_KERNEL_ATTR 					\
@@ -1859,7 +2115,7 @@ extern RESOURCE_ST Resource[];
 
 #define RSC_CREATE_RATIO_CLOCK_COND3_ATTR				\
 {									\
-	HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,LWK,LWK,	\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,	\
 	LWK,LWK,HWK,HWK,HWK,HWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK	\
 }
 
@@ -1923,5 +2179,44 @@ extern RESOURCE_ST Resource[];
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
 	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK \
+}
+
+#define RSC_CREATE_SETTINGS_COND_CODE	"                                "
+
+#define RSC_CREATE_HELP_BLANK_CODE	"                  "
+
+#define RSC_CREATE_ADV_HELP_BLANK_CODE	"                                      "
+
+#define RSC_LOGO_R0 "      ______                ______                  "
+#define RSC_LOGO_R1 "     / ____/___  ________  / ____/_______  ____ _   "
+#define RSC_LOGO_R2 "    / /   / __ \\/ ___/ _ \\/ /_  / ___/ _ \\/ __ `/   "
+#define RSC_LOGO_R3 "   / /___/ /_/ / /  /  __/ __/ / /  /  __/ /_/ /    "
+#define RSC_LOGO_R4 "   \\____/\\____/_/   \\___/_/   /_/   \\___/\\__, /     "
+#define RSC_LOGO_R5 "                                           /_/      "
+#define RSC_COPY_R0 "      by CyrIng                                     "
+#define RSC_COPY_R1 "                                                    "
+#define RSC_COPY_R2 "            (C)2015-2020 CYRIL INGENIERIE           "
+
+#define RSC_CREATE_SELECT_FREQ_PKG_ATTR 				\
+{									\
+	HYK,HYK,HYK,HYK,HYK,HYK,HYK,HYK,HYK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HYK,HYK,HYK,HYK,HYK,HYK,\
+	HYK,HYK,HDK,HDK,HDK,LWK,LWK,HYK,HYK,HYK,HYK,HYK,LWK,LWK 	\
+}
+
+#define RSC_CREATE_SELECT_FREQ_COND0_ATTR				\
+{									\
+	LWK,LWK,HWK,HWK,HWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,		\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,		\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,HDK,HDK,HDK,			\
+	LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK,LWK				\
+}
+
+#define RSC_CREATE_SELECT_FREQ_COND1_ATTR				\
+{									\
+	LBK,LBK,HBK,HBK,HBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,		\
+	LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,		\
+	LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,			\
+	LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK,LBK				\
 }
 

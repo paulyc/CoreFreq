@@ -1,12 +1,15 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
 #define COREFREQ_MAJOR	1
-#define COREFREQ_MINOR	65
-#define COREFREQ_REV	2
+#define COREFREQ_MINOR	76
+#define COREFREQ_REV	0
+
+#define FEAT_MESSAGE(_msg)		_Pragma(#_msg)
+#define FEAT_MSG(_msg)			FEAT_MESSAGE(message(#_msg))
 
 #define COREFREQ_STRINGIFY(_number)	#_number
 
@@ -18,6 +21,8 @@
 #define COREFREQ_VERSION	COREFREQ_SERIALIZE(	COREFREQ_MAJOR, \
 							COREFREQ_MINOR, \
 							COREFREQ_REV	)
+
+#define COREFREQ_FORMAT_STR(_length) "%" COREFREQ_STRINGIFY(_length) "s"
 
 typedef struct {
 	unsigned short	major,
@@ -87,7 +92,18 @@ enum {	GenuineIntel,
 	Kabylake_UY,
 	Cannonlake,
 	Geminilake,
+	Icelake,
 	Icelake_UY,
+	Icelake_X,
+	Icelake_D,
+	Sunny_Cove,
+	Tigerlake,
+	Tigerlake_U,
+	Cometlake,
+	Cometlake_UY,
+	Atom_C3000,
+	Atom_Tremont,
+	Atom_Tremont_EHL,
 	AMD_Family_0Fh,
 	AMD_Family_10h,
 	AMD_Family_11h,
@@ -96,6 +112,7 @@ enum {	GenuineIntel,
 	AMD_Family_15h,
 	AMD_Family_16h,
 	AMD_Family_17h,
+	AMD_Family_18h,
 	ARCHITECTURES
 };
 
@@ -231,29 +248,45 @@ enum THERM_PWR_EVENTS {
 	EVENT_CROSS_DOMAIN	= 0b1000000
 };
 
+enum {
+	SENSOR_LOWEST,
+	SENSOR_HIGHEST,
+	SENSOR_LIMITS_DIM
+};
+
 typedef union
 {
 	unsigned int	Target;
 	unsigned short	Offset[2];
 } THERMAL_PARAM;
 
+enum FORMULA_SCOPE {
+	FORMULA_SCOPE_NONE	= 0,
+	FORMULA_SCOPE_SMT	= 1,
+	FORMULA_SCOPE_CORE	= 2,
+	FORMULA_SCOPE_PKG	= 3
+};
+
+enum THERMAL_KIND {
+	THERMAL_KIND_NONE	= 0b000000000000000000000000,
+	THERMAL_KIND_INTEL	= 0b000000000000000000000001,
+	THERMAL_KIND_AMD	= 0b000000000001000000000000,
+	THERMAL_KIND_AMD_0Fh	= 0b000000000011000000000000,
+	THERMAL_KIND_AMD_15h	= 0b000001000001000000000000,
+	THERMAL_KIND_AMD_17h	= 0b000100000001000000000000
+};
+
 enum THERMAL_FORMULAS {
-	THERMAL_FORMULA_NONE =						\
-	0b0000000000000000000000000000000000000000000000000000000000000000,
-	THERMAL_FORMULA_INTEL =						\
-	0b0000000000000000000000000000000000000000000000000000000000000001,
-	THERMAL_FORMULA_AMD =						\
-	0b0000000000000000000000000000000100000000000000000000000000000000,
-	THERMAL_FORMULA_AMD_0Fh =					\
-	0b0000000000000000000000000000001100000000000000000000000000000000,
-	THERMAL_FORMULA_AMD_15h =					\
-	0b0000000000000000000000000100000100000000000000000000000000000000,
-	THERMAL_FORMULA_AMD_17h =					\
-	0b0000000000000000000000010000000100000000000000000000000000000000
+THERMAL_FORMULA_NONE	= (THERMAL_KIND_NONE << 8)	| FORMULA_SCOPE_NONE,
+THERMAL_FORMULA_INTEL	= (THERMAL_KIND_INTEL << 8)	| FORMULA_SCOPE_SMT,
+THERMAL_FORMULA_AMD	= (THERMAL_KIND_AMD << 8)	| FORMULA_SCOPE_SMT,
+THERMAL_FORMULA_AMD_0Fh = (THERMAL_KIND_AMD_0Fh << 8)	| FORMULA_SCOPE_SMT,
+THERMAL_FORMULA_AMD_15h = (THERMAL_KIND_AMD_15h << 8)	| FORMULA_SCOPE_CORE,
+THERMAL_FORMULA_AMD_17h = (THERMAL_KIND_AMD_17h << 8)	| FORMULA_SCOPE_PKG
 };
 
 #define COMPUTE_THERMAL_INTEL(Temp, Param, Sensor)			\
-	(Temp = Param.Target - Sensor)
+	(Temp = Param.Offset[0] - Param.Offset[1] - Sensor)
 
 #define COMPUTE_THERMAL_AMD(Temp, Param, Sensor)			\
 	/*( TODO )*/
@@ -270,25 +303,30 @@ enum THERMAL_FORMULAS {
 #define COMPUTE_THERMAL(_ARCH_, Temp, Param, Sensor)			\
 	COMPUTE_THERMAL_##_ARCH_(Temp, Param, Sensor)
 
+enum VOLTAGE_KIND {
+	VOLTAGE_KIND_NONE	= 0b000000000000000000000000,
+	VOLTAGE_KIND_INTEL	= 0b000000000000000000000001,
+	VOLTAGE_KIND_INTEL_CORE2= 0b000000000000000000000011,
+	VOLTAGE_KIND_INTEL_SNB	= 0b000000000000000010000001,
+	VOLTAGE_KIND_INTEL_SKL_X= 0b000000000000010000000001,
+	VOLTAGE_KIND_AMD	= 0b000000000001000000000000,
+	VOLTAGE_KIND_AMD_0Fh	= 0b000000000011000000000000,
+	VOLTAGE_KIND_AMD_15h	= 0b000001000001000000000000,
+	VOLTAGE_KIND_AMD_17h	= 0b000100000001000000000000,
+	VOLTAGE_KIND_WINBOND_IO = 0b001000000000000000000000
+};
+
 enum VOLTAGE_FORMULAS {
-	VOLTAGE_FORMULA_NONE =						\
-	0b0000000000000000000000000000000000000000000000000000000000000000,
-	VOLTAGE_FORMULA_INTEL =						\
-	0b0000000000000000000000000000000000000000000000000000000000000001,
-	VOLTAGE_FORMULA_INTEL_CORE2 =					\
-	0b0000000000000000000000000000000000000000000000000000000000000011,
-	VOLTAGE_FORMULA_INTEL_SNB =					\
-	0b0000000000000000000000000000000000000000000000000000000010000001,
-	VOLTAGE_FORMULA_INTEL_SKL_X =					\
-	0b0000000000000000000000000000000000000000000000000000010000000001,
-	VOLTAGE_FORMULA_AMD =						\
-	0b0000000000000000000000000000000100000000000000000000000000000000,
-	VOLTAGE_FORMULA_AMD_0Fh =					\
-	0b0000000000000000000000000000001100000000000000000000000000000000,
-	VOLTAGE_FORMULA_AMD_15h =					\
-	0b0000000000000000000000000100000100000000000000000000000000000000,
-	VOLTAGE_FORMULA_AMD_17h =					\
-	0b0000000000000000000000010000000100000000000000000000000000000000
+VOLTAGE_FORMULA_NONE       =(VOLTAGE_KIND_NONE << 8)       | FORMULA_SCOPE_NONE,
+VOLTAGE_FORMULA_INTEL      =(VOLTAGE_KIND_INTEL << 8)      | FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_INTEL_CORE2=(VOLTAGE_KIND_INTEL_CORE2 << 8)| FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_INTEL_SNB  =(VOLTAGE_KIND_INTEL_SNB << 8)  | FORMULA_SCOPE_PKG,
+VOLTAGE_FORMULA_INTEL_SKL_X=(VOLTAGE_KIND_INTEL_SKL_X << 8)| FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_AMD        =(VOLTAGE_KIND_AMD << 8)        | FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_AMD_0Fh    =(VOLTAGE_KIND_AMD_0Fh << 8)    | FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_AMD_15h    =(VOLTAGE_KIND_AMD_15h << 8)    | FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_AMD_17h    =(VOLTAGE_KIND_AMD_17h << 8)    | FORMULA_SCOPE_SMT,
+VOLTAGE_FORMULA_WINBOND_IO =(VOLTAGE_KIND_WINBOND_IO << 8) | FORMULA_SCOPE_PKG
 };
 
 #define COMPUTE_VOLTAGE_INTEL_CORE2(Vcore, VID) 			\
@@ -329,27 +367,46 @@ enum VOLTAGE_FORMULAS {
 #define COMPUTE_VOLTAGE_AMD_17h(Vcore, VID)				\
 		(Vcore = 1.550 -(0.00625 * (double) (VID)))
 
+#define COMPUTE_VOLTAGE_WINBOND_IO(Vcore, VID)				\
+		(Vcore = (double) (VID) * 0.008)
+
 #define COMPUTE_VOLTAGE(_ARCH_, Vcore, VID)	\
 		COMPUTE_VOLTAGE_##_ARCH_(Vcore, VID)
 
-enum POWER_FORMULAS {
-	POWER_FORMULA_NONE =						\
-	0b0000000000000000000000000000000000000000000000000000000000000000,
-	POWER_FORMULA_INTEL =						\
-	0b0000000000000000000000000000000000000000000000000000000000000001,
-	POWER_FORMULA_INTEL_ATOM =					\
-	0b0000000000000000000000000000000000000000000000000000000000000011,
-	POWER_FORMULA_AMD =						\
-	0b0000000000000000000000000000000100000000000000000000000000000000,
-	POWER_FORMULA_AMD_17h =						\
-	0b0000000000000000000000010000000100000000000000000000000000000000
+enum POWER_KIND {
+	POWER_KIND_NONE 	= 0b000000000000000000000000,
+	POWER_KIND_INTEL	= 0b000000000000000000000001,
+	POWER_KIND_INTEL_ATOM	= 0b000000000000000000000011,
+	POWER_KIND_AMD		= 0b000000000001000000000000,
+	POWER_KIND_AMD_17h	= 0b000100000001000000000000
 };
+
+enum POWER_FORMULAS {
+POWER_FORMULA_NONE	=(POWER_KIND_NONE << 8) 	| FORMULA_SCOPE_NONE,
+POWER_FORMULA_INTEL	=(POWER_KIND_INTEL << 8)	| FORMULA_SCOPE_NONE,
+POWER_FORMULA_INTEL_ATOM=(POWER_KIND_INTEL_ATOM << 8)	| FORMULA_SCOPE_NONE,
+POWER_FORMULA_AMD	=(POWER_KIND_AMD << 8)		| FORMULA_SCOPE_CORE,
+POWER_FORMULA_AMD_17h	=(POWER_KIND_AMD_17h << 8)	| FORMULA_SCOPE_CORE
+};
+
+#define SCOPE_OF_FORMULA(formula)	(formula & 0b0011)
+
+#define KIND_OF_FORMULA(formula) ((formula >> 8) & 0b111111111111111111111111)
 
 #define ROUND_TO_PAGES(Size)	PAGE_SIZE * ((Size / PAGE_SIZE) 	\
 				+ ((Size % PAGE_SIZE)? 1:0))
 
 #define KMAX(M, m)	((M) > (m) ? (M) : (m))
 #define KMIN(m, M)	((m) < (M) ? (m) : (M))
+
+#define StrCopy(_dest, _src, _max)					\
+({									\
+	size_t _min = KMIN((_max - 1), strlen(_src));			\
+	memcpy(_dest, _src, _min);					\
+	_dest[_min] = '\0';						\
+})
+
+#define ZLIST( ... ) (char *[]) { __VA_ARGS__ , NULL }
 
 #define DRV_DEVNAME	"corefreqk"
 #define DRV_FILENAME	"/dev/"DRV_DEVNAME
@@ -365,6 +422,13 @@ enum POWER_FORMULAS {
 #define CHILD_TH_MS	(500 * 1000000LU)
 
 #define PRECISION	100
+
+#define UNIT_KHz(_f)		(_f * 10 * PRECISION)
+#define UNIT_MHz(_f)		(_f * UNIT_KHz(1000))
+#define UNIT_GHz(_f)		(_f * UNIT_MHz(1000))
+#define CLOCK_KHz(_t, _f)	(_f / UNIT_KHz((_t) 1))
+#define CLOCK_MHz(_t, _f)	(_f / UNIT_MHz((_t) 1))
+#define CLOCK_GHz(_t, _f)	(_f / UNIT_GHz((_t) 1))
 
 #define TIMESPEC(nsec)							\
 ({									\
@@ -419,8 +483,15 @@ enum UNCORE_BOOST {
 
 #define UNCORE_BOOST(NC) UNCORE_RATIO_##NC
 
-#define MAXCLOCK_TO_RATIO(BaseClock)					\
-	((unsigned int) (5100000000.0 / BaseClock))
+#if defined(MAX_FREQ_HZ) && (MAX_FREQ_HZ >= 4850000000)
+#define MAXCLOCK_TO_RATIO(_typeout, BaseClock) ( (_typeout) (		\
+		MAX_FREQ_HZ / BaseClock					\
+) )
+#else
+#define MAXCLOCK_TO_RATIO(_typeout, BaseClock) ( (_typeout) (		\
+		5250000000 / BaseClock					\
+) )
+#endif
 
 enum PWR_DOMAIN {
 	DOMAIN_PKG,
@@ -436,8 +507,10 @@ enum PWR_DOMAIN {
 
 #define VENDOR_INTEL	"GenuineIntel"
 #define VENDOR_AMD	"AuthenticAMD"
+#define VENDOR_HYGON	"HygonGenuine"
 #define CRC_INTEL	0x75a2ba39
 #define CRC_AMD 	0x3485bbd3
+#define CRC_HYGON	0x18044630
 
 enum OFFLINE
 {
@@ -468,10 +541,18 @@ typedef struct
 		( ((this_ratio * clock.Q) * 1000LLU * interval) 	\
 		+ ((this_ratio * clock.R) / max_ratio))
 
+#define ABS_FREQ_MHz(this_type, this_ratio, this_clock) 		\
+(									\
+		CLOCK_MHz(this_type, this_ratio * this_clock.Hz)	\
+)
+
 typedef union {
 	signed long long	sllong;
 	struct {
-		signed int	Offset;
+	    struct {
+		signed short	Offset;
+		signed short	cpu;
+	    };
 		unsigned int	NC;
 	};
 } CLOCK_ARG;
@@ -485,6 +566,15 @@ enum CLOCK_MOD_INDEX {
 	CLOCK_MOD_TGT = 1
 };
 
+enum {	/* Stick to the Kernel enumeration in include/asm/nmi.h		*/
+	BIT_NMI_LOCAL = 0,
+	BIT_NMI_UNKNOWN,
+	BIT_NMI_SERR,
+	BIT_NMI_IO_CHECK
+};
+
+#define BIT_NMI_MASK	0x0fLLU
+
 typedef union
 {
 	signed long long	Proc;
@@ -494,7 +584,7 @@ typedef union
 	};
 } SERVICE_PROC;
 
-#define CPUID_MAX_FUNC	60
+#define CPUID_MAX_FUNC	67
 
 typedef struct
 {
@@ -559,12 +649,12 @@ typedef struct
 		TM2	:  9-8,
 		SSSE3	: 10-9,  /* AMD Family 0Fh			*/
 		CNXT_ID : 11-10,
-		Unused1 : 12-11,
+		SDBG	: 12-11, /* IA32_DEBUG_INTERFACE MSR support	*/
 		FMA	: 13-12,
 		CMPXCHG16:14-13,
 		xTPR	: 15-14,
 		PDCM	: 16-15,
-		Unused2 : 17-16,
+		Unused1 : 17-16,
 		PCID	: 18-17,
 		DCA	: 19-18,
 		SSE41	: 20-19,
@@ -602,7 +692,7 @@ typedef struct
 		CMOV	: 16-15,
 		PAT	: 17-16,
 		PSE36	: 18-17,
-		PSN	: 19-18, /* Intel				*/
+		PSN	: 19-18, /* Intel Processor Serial Number	*/
 		CLFLUSH : 20-19,
 		Unused2 : 21-20,
 		DS_PEBS : 22-21,
@@ -679,7 +769,7 @@ typedef struct THERMAL_POWER_LEAF
 		HWP_PECI: 17-16,/* HWP PECI override support state.	*/
 		HWP_Flex: 18-17,/* Flexible HWP is support state.	*/
 		HWP_Fast: 19-18,/* IA32_HWP_REQUEST MSR fast access mode*/
-		Unused3 : 20-19,
+		HWFB_Cap: 20-19,/* IA32 HW_FEEDBACK* MSR support	*/
 		HWP_Idle: 21-20,/* Ignore (or not) Idle SMT Processor.	*/
 		Unused4 : 32-21;
 	} EAX;
@@ -710,7 +800,10 @@ typedef struct THERMAL_POWER_LEAF
 	struct
 	{	/* Intel reserved.					*/
 		unsigned int
-		Unused1 : 32-0;
+		HWFB_Cap:  8-7, /* Hardware Feedback Interface bitmap	*/
+		HWFB_pSz: 12-8, /* HW Feedback structure size (4K page) */
+		Unused1 : 16-12,
+		HWFB_Idx: 32-16; /* HW Feedback structure base 0 index	*/
 	} EDX;
 } CPUID_0x00000006;
 
@@ -725,8 +818,8 @@ typedef struct	/* Extended Feature Flags Enumeration Leaf.		*/
 	{
 		unsigned int
 		FSGSBASE	:  1-0, /* Common x86			*/
-		TSC_ADJUST	:  2-1,
-		SGX		:  3-2,
+		TSC_ADJUST	:  2-1, /* IA32_TSC_ADJUST		*/
+		SGX		:  3-2, /* Software Guard Extensions	*/
 		BMI1		:  4-3, /* Common x86			*/
 		HLE		:  5-4, /* Hardware Lock Elision	*/
 		AVX2		:  6-5, /* Common x86			*/
@@ -746,10 +839,10 @@ typedef struct	/* Extended Feature Flags Enumeration Leaf.		*/
 		ADX		: 20-19, /* Arbitrary-Precision Arithmetic */
 		SMAP		: 21-20, /*Supervisor-Mode Access & CLAC/STAC*/
 		AVX512_IFMA	: 22-21,
-		Unused1 	: 23-22,
-		CLFLUSHOPT	: 24-23,
-		CLWB		: 25-24,
-		ProcessorTrace	: 26-25,
+		Reserved1	: 23-22,
+		CLFLUSHOPT	: 24-23, /* Flush Cache Line Optimized	*/
+		CLWB		: 25-24, /* Cache Line Write Back	*/
+		ProcessorTrace	: 26-25, /* CPUID.(EAX=14H, ECX=0)	*/
 		AVX512PF	: 27-26, /* Intel Xeon Phi		*/
 		AVX512ER	: 28-27, /* Intel Xeon Phi		*/
 		AVX512CD	: 29-28,
@@ -764,17 +857,80 @@ typedef struct	/* Extended Feature Flags Enumeration Leaf.		*/
 		AVX512_VBMI	:  2-1,
 		UMIP		:  3-2, /* User-Mode Instruction Prevention */
 		PKU		:  4-3, /* Protection Keys User-Mode pages */
-		OSPKE		:  5-4,
-		Unused1 	: 17-5,
+		OSPKE		:  5-4, /* RDPKRU/WRPKRU instructions	*/
+		WAITPKG 	:  6-5, /* TPAUSE, UMONITOR, UMWAIT	*/
+		AVX512_VBMI2	:  7-6,
+		Reserved1	:  8-7,
+		GFNI		:  9-8, /* Galois Field SSE instructions*/
+		VAES		: 10-9,
+		VPCLMULQDQ	: 11-10,
+		AVX512_VNNI	: 12-11,
+		AVX512_BITALG	: 13-12,
+		Reserved2	: 14-13,
+		AVX512_VPOPCNTDQ: 15-14, /* Intel Xeon Phi		*/
+		Reserved3	: 17-15,
 		MAWAU		: 22-17, /* for BNDLDX & BNDSTX instructions*/
-		RDPID		: 23-22, /*RDPID & IA32_TSC_AUX availability*/
-		Unused2 	: 30-23,
+		RDPID		: 23-22, /* RDPID & IA32_TSC_AUX availability*/
+		Reserved4	: 25-23,
+		CLDEMOTE	: 26-25, /* Support of cache line demote */
+		Reserved5	: 27-26,
+		MOVDIRI 	: 28-27, /* Move Doubleword as Direct Store*/
+		MOVDIR64B	: 29-28, /* Move 64 Bytes as Direct Store*/
+		ENQCMD		: 30-29, /* Support of Enqueue Stores	*/
 		SGX_LC		: 31-30, /* SGX Launch Configuration support*/
-		Unused3 	: 32-31;
+		Reserved6	: 32-31;
 	} ECX;
+	struct
+	{	/* Intel reserved.					*/
 		unsigned int
-	EDX			: 32-0; /* Intel reserved.		*/
+		Reserved1	:  2-0,
+		AVX512_4VNNIW	:  3-2, /* Intel Xeon Phi		*/
+		AVX512_4FMAPS	:  4-3, /* Intel Xeon Phi		*/
+		FShort_REP_MOV	:  5-4, /* Fast Short REP MOV		*/
+		Reserved2	:  8-5,
+		AVX512_VP2INTER :  9-8, /* AVX512_VP2INTERSECT		*/
+		Reserved3	: 10-9,
+		MD_CLEAR_Cap	: 11-10,
+		Reserved4	: 14-11,
+		SERIALIZE	: 15-14, /* SERIALIZE instruction	*/
+		Hybrid		: 16-15, /* Hybrid part processor	*/
+		TSXLDTRK	: 17-16, /* TSX suspend load address tracking*/
+		Reserved5	: 18-17,
+		PCONFIG		: 19-18,
+		Reserved6	: 26-19,
+		IBRS_IBPB_Cap	: 27-26, /* IA32_SPEC_CTRL,IA32_PRED_CMD */
+		STIBP_Cap	: 28-27, /* IA32_SPEC_CTRL[1]		*/
+		L1D_FLUSH_Cap	: 29-28, /* IA32_FLUSH_CMD		*/
+		IA32_ARCH_CAP	: 30-29, /* IA32_ARCH_CAPABILITIES	*/
+		IA32_CORE_CAP	: 31-30, /* IA32_CORE_CAPABILITIES	*/
+		SSBD_Cap	: 32-31; /* IA32_SPEC_CTRL[2]		*/
+	} EDX;
 } CPUID_0x00000007;
+
+typedef struct	/* Extended Feature Flags Enumeration Leaf 1		*/
+{
+	struct
+	{
+		unsigned int
+		Reserved1	:  5-0,
+		AVX512_BF16	:  6-5, /* BFLOAT16 support in AVX512	*/
+		Reserved2	: 32-6;
+	} EAX;
+	struct
+	{	/* Intel reserved.					*/
+		unsigned int
+		Reserved	: 32-0;
+	} EBX, ECX, EDX;
+} CPUID_0x00000007_1;
+
+typedef struct	/* Extended Feature Flags Leaf equal or greater than 2	*/
+{
+	struct
+	{	/* Intel reserved.					*/
+		unsigned int
+		Reserved	: 32-0;
+	} EAX, EBX, ECX, EDX;
+} CPUID_0x00000007_2;
 
 typedef struct	/* Architectural Performance Monitoring Leaf.		*/
 {	/* Intel reserved.						*/
@@ -1036,6 +1192,7 @@ typedef struct	/* BSP CPUID features.					*/
 	CPUID_0x00000005	MWait;
 	CPUID_0x00000006	Power;
 	CPUID_0x00000007	ExtFeature;
+	CPUID_0x00000007_1	ExtFeature_Leaf1;
 	CPUID_0x0000000a	PerfMon;
 	CPUID_0x80000001	ExtInfo;
 	CPUID_0x80000007	AdvPower;
@@ -1062,7 +1219,7 @@ typedef struct	/* BSP CPUID features.					*/
 			Uncore_Unlock	: 21-20,
 			HWP_Enable	: 22-21,
 			HDC_Enable	: 23-22,
-			UnusedBits	: 24-23,
+			_UnusedFeatBits : 24-23,
 			SpecTurboRatio	: 32-24;
 	};
 } FEATURES;
@@ -1163,6 +1320,9 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_INTEL_LYNNFIELD_NON_CORE
 	#define PCI_DEVICE_ID_INTEL_LYNNFIELD_NON_CORE	0x2c51
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_CLARKSFIELD_NON_CORE
+    #define PCI_DEVICE_ID_INTEL_CLARKSFIELD_NON_CORE	0x2c52
+#endif
 #ifndef PCI_DEVICE_ID_INTEL_CLARKDALE_NON_CORE
 	#define PCI_DEVICE_ID_INTEL_CLARKDALE_NON_CORE	0x2c61
 #endif
@@ -1239,22 +1399,110 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_0154
 	#define PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_0154	0x0154
 #endif
+/* Source: Intel Xeon Processor E5 & E7 v1 Datasheet Vol 2		*/
+/*	DMI2: Device=0 - Function=0					*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_HOST_BRIDGE
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_HOST_BRIDGE	0x3c00
+#endif
+/*	QPIMISCSTAT: Device=8 - Function=0				*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_QPI_LINK0
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_QPI_LINK0	0x3c80
+#endif
+/*	Integrated Memory Controller # : General and MemHot Registers	*/
+/*	Xeon E5 - CPGC: Device=15 - Function=0				*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CPGC
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CPGC 0x3ca8
+#endif
+/*TODO( Nehalem/Xeon E7 - CPGC: Device=?? - Function=? )
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CPGC
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CPGC 0x0
+#endif									*/
+/*	Integrated Memory Controller # : Channel [m-M] Thermal Registers*/
+/*	Controller #0: Device=16 - Function=0,1,2,3			*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH0 0x3cb0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH1 0x3cb1
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH2 0x3cb2
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL0_CH3 0x3cb3
+#endif
+/*	Controller #1: Device=16 - Function=4,5,6,7			*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH0 0x3cb4
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH1 0x3cb5
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH2 0x3cb6
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_IMC_CTRL1_CH3 0x3cb7
+#endif
+/*	Integrated Memory Controller 0 : Channel # TAD Registers	*/
+/*	Xeon E5 - TAD Controller #0: Device=15 - Function=2,3,4,5,6	*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH0 0x3caa
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH1 0x3cab
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH2 0x3cac
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH3 0x3cad
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH4
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL0_CH4 0x3cae
+#endif
+/*	Integrated Memory Controller 1 : Channel # TAD Registers	*/
+/*TODO( Nehalem/Xeon E7 - TAD Controller #1: Device=?? - Function=? )
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH0 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH1 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH2 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH3 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH4
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_TAD_CTRL1_CH4 0x0
+#endif									*/
+/*	Power Control Unit						*/
+/*TODO( PCU: Device=10 - Function=3 )					*/
+#ifndef PCI_DEVICE_ID_INTEL_SNB_EP_CAPABILITY
+	#define PCI_DEVICE_ID_INTEL_SNB_EP_CAPABILITY	0x3cd0
+#endif
 /* Source: Intel Xeon Processor E5 & E7 v2 Datasheet Vol 2		*/
+/*	DMI2: Device=0 - Function=0					*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_HOST_BRIDGE
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_HOST_BRIDGE	0x0e00
 #endif
-/*	QPIMISCSTAT							*/
+/*	QPIMISCSTAT: Device=8 - Function=0				*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_QPI_LINK0
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_QPI_LINK0	0x0e80
 #endif
 /*	Integrated Memory Controller # : General and MemHot Registers	*/
+/*	Xeon E5 - CPGC: Device=15 - Function=0				*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CPGC
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CPGC 0x0ea8
 #endif
+/*	Xeon E7 - CPGC: Device=29 - Function=0				*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CPGC
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CPGC 0x0e68
 #endif
 /*	Integrated Memory Controller # : Channel [m-M] Thermal Registers*/
+/*	Controller #0: Device=16 - Function=0,1,2,3			*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH0
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH0 0x0eb0
 #endif
@@ -1267,6 +1515,7 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH3
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL0_CH3 0x0eb3
 #endif
+/*	Controller #1: Device=16 - Function=4,5,6,7			*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH0
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH0 0x0eb4
 #endif
@@ -1280,6 +1529,7 @@ typedef struct	/* BSP CPUID features.					*/
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_IMC_CTRL1_CH3 0x0eb7
 #endif
 /*	Integrated Memory Controller 0 : Channel # TAD Registers	*/
+/*	Xeon E5 - TAD Controller #0: Device=15 - Function=2,3,4,5	*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH0
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH0 0x0eaa
 #endif
@@ -1293,6 +1543,7 @@ typedef struct	/* BSP CPUID features.					*/
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL0_CH3 0x0ead
 #endif
 /*	Integrated Memory Controller 1 : Channel # TAD Registers	*/
+/*	Xeon E7 - TAD Controller #1: Device=29 - Function=2,3,4,5	*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH0
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH0 0x0e6a
 #endif
@@ -1306,8 +1557,87 @@ typedef struct	/* BSP CPUID features.					*/
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_TAD_CTRL1_CH3 0x0e6d
 #endif
 /*	Power Control Unit						*/
+/*	PCU: Device=10 - Function=3					*/
 #ifndef PCI_DEVICE_ID_INTEL_IVB_EP_CAPABILITY
 	#define PCI_DEVICE_ID_INTEL_IVB_EP_CAPABILITY	0x0ec3
+#endif
+/* Source: Intel Xeon Processor E5 & E7 v3 Datasheet Vol 2		*/
+/*	DMI2: Device=0 - Function=0					*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_HOST_BRIDGE
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_HOST_BRIDGE	0x2f00
+#endif
+/*	QPIMISCSTAT: Device=8 - Function=0				*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_QPI_LINK0
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_QPI_LINK0	0x2f80
+#endif
+/*	Integrated Memory Controller # : General and MemHot Registers	*/
+/*	Xeon E5 - CPGC: Device=19 - Function=0				*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CPGC
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CPGC 0x2fa8
+#endif
+/*	Xeon E7 - CPGC: Device=22 - Function=0				*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CPGC
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CPGC 0x2f68
+#endif
+/*	Integrated Memory Controller # : Channel [m-M] Thermal Registers*/
+/*TODO( Controller #0: Device=?? - Function=0,1,2,3 )
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH0 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH1 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH2 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL0_CH3 0x0
+#endif									*/
+/*TODO( Controller #1: Device=?? - Function=4,5,6,7 )
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH0 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH1 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH2 0x0
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_IMC_CTRL1_CH3 0x0
+#endif									*/
+/*	Integrated Memory Controller 0 : Channel # TAD Registers	*/
+/*	Xeon E5 - TAD Controller #0: Device=19 - Function=2,3,4,5	*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH0
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH0 0x2faa
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH1
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH1 0x2fab
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH2
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH2 0x2fac
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH3
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL0_CH3 0x2fad
+#endif
+/*	Integrated Memory Controller 1 : Channel # TAD Registers	*/
+/*	Xeon E7 - TAD Controller #1: Device=22 - Function=2,3,4,5	*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH0
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH0 0x2f6a
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH1
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH1 0x2f6b
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH2
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH2 0x2f6c
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH3
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_TAD_CTRL1_CH3 0x2f6d
+#endif
+/*	Power Control Unit						*/
+/*	PCU: Device=30 - Function=3					*/
+#ifndef PCI_DEVICE_ID_INTEL_HSW_EP_CAPABILITY
+	#define PCI_DEVICE_ID_INTEL_HSW_EP_CAPABILITY	0x2fc0
 #endif
 /* Source: 4th, 5th Generation Intel® Core™ Processor Family Vol2 §3.0	*/
 #ifndef PCI_DEVICE_ID_INTEL_HASWELL_IMC_HA0
@@ -1316,8 +1646,17 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_INTEL_HASWELL_IMC_SA
 	#define PCI_DEVICE_ID_INTEL_HASWELL_IMC_SA	0x0c00
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_HASWELL_MH_IMC_HA0
+	#define PCI_DEVICE_ID_INTEL_HASWELL_MH_IMC_HA0	0x0c04
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_HASWELL_UY_IMC_HA0
+	#define PCI_DEVICE_ID_INTEL_HASWELL_UY_IMC_HA0	0x0a04
+#endif
 #ifndef PCI_DEVICE_ID_INTEL_BROADWELL_IMC_HA0
 	#define PCI_DEVICE_ID_INTEL_BROADWELL_IMC_HA0	0x1604
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_BROADWELL_D_IMC_HA0
+	#define PCI_DEVICE_ID_INTEL_BROADWELL_D_IMC_HA0 0x1610
 #endif
 #ifndef PCI_DEVICE_ID_INTEL_BROADWELL_H_IMC_HA0
 	#define PCI_DEVICE_ID_INTEL_BROADWELL_H_IMC_HA0 0x1614
@@ -1437,6 +1776,35 @@ typedef struct	/* BSP CPUID features.					*/
 #ifndef PCI_DEVICE_ID_AMD_17H_IOMMU
 	#define PCI_DEVICE_ID_AMD_17H_IOMMU		0x1451
 #endif
+/* Source: /include/linux/pci_ids.h					*/
+#ifndef PCI_DEVICE_ID_AMD_17H_ZEPPELIN_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_ZEPPELIN_DF_F3	0x1463	/* Zeppelin */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_RAVEN_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_RAVEN_DF_F3	0x15eb	/* Raven */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_MATISSE_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_MATISSE_DF_F3	0x1443	/* Zen2 */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_STARSHIP_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_STARSHIP_DF_F3	0x1493	/* Zen2 */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_RENOIR_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_RENOIR_DF_F3	0x144b	/* Renoir */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_ARIEL_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_ARIEL_DF_F3	0x13f3	/* Ariel */
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_FIREFLIGHT_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_FIREFLIGHT_DF_F3	0x15f3	/* FireFlight*/
+#endif
+#ifndef PCI_DEVICE_ID_AMD_17H_ARDEN_DF_F3
+	#define PCI_DEVICE_ID_AMD_17H_ARDEN_DF_F3	0x160b	/* Arden */
+#endif
+
+/* Hardware Monitoring: Super I/O chipsets				*/
+#define COMPATIBLE		0xffff
+#define W83627			0x5ca3
 
 typedef struct
 {
@@ -1498,6 +1866,13 @@ typedef struct
 #define CPUFREQ_NAME_LEN	16
 #endif
 
+typedef struct {			/* 0: Disable, 1: Enable	*/
+	unsigned short	CPUidle :  1-0,
+			CPUfreq :  2-1,
+			Governor:  3-2,
+			unused	: 16-3;
+} KERNEL_DRIVER;
+
 typedef struct {
 	struct {
 		int		stateCount,
@@ -1551,10 +1926,13 @@ typedef struct {
 				+ sizeof(unsigned int)			\
 				+ 4 * MAX_UTS_LEN )
 
-#define TASK_ORDER		6
-
+#if defined(TASK_ORDER) && (TASK_ORDER > 0)
 #define TASK_LIMIT		(((4096 << TASK_ORDER) - SYSGATE_STRUCT_SIZE) \
 				/ sizeof(TASK_MCB))
+#else
+#define TASK_LIMIT		(((4096 << 5) - SYSGATE_STRUCT_SIZE)	\
+				/ sizeof(TASK_MCB))
+#endif
 
 /* Input-Output Control							*/
 #define COREFREQ_TOGGLE_OFF	0x0
@@ -1579,7 +1957,8 @@ enum {
 	MACHINE_AUTOCLOCK,
 	MACHINE_EXPERIMENTAL,
 	MACHINE_INTERRUPTS,
-	MACHINE_LIMIT_IDLE
+	MACHINE_LIMIT_IDLE,
+	MACHINE_FORMULA_SCOPE
 };
 
 enum {
@@ -1628,6 +2007,43 @@ enum {
 	CONIC_VARIATIONS
 };
 
+/* Linked list								*/
+#define GetPrev(node)		(node->prev)
+
+#define GetNext(node)		(node->next)
+
+#define GetHead(list)		(list)->head
+
+#define SetHead(list, node)	GetHead(list) = node
+
+#define GetTail(list)		(list)->tail
+
+#define SetDead(list)		SetHead(list, NULL)
+
+#define IsHead(list, node)	(GetHead(list) == node)
+
+#define IsDead(list)		(GetHead(list) == NULL)
+
+#define IsCycling(node) (						\
+	(GetNext(node) == node) && (GetPrev(node) == node)		\
+)
+
+#define GetFocus(list)		GetHead(list)
+
+#define RemoveNodeFromList(node, list)					\
+({									\
+	GetNext(GetPrev(node)) = GetNext(node); 			\
+	GetPrev(GetNext(node)) = GetPrev(node); 			\
+})
+
+#define AppendNodeToList(node, list)					\
+({									\
+	GetPrev(node) = GetHead(list);					\
+	GetNext(node) = GetNext(GetHead(list)); 			\
+	GetPrev(GetNext(GetHead(list))) = node; 			\
+	GetNext(GetHead(list)) = node;					\
+})
+
 /* Circular buffer							*/
 #define RING_SIZE	16
 
@@ -1666,7 +2082,8 @@ typedef struct {
 	( (Ring.head - Ring.tail) == RING_SIZE );			\
 })
 
-#if FEAT_DBG > 1
+#if FEAT_DBG > 2
+FEAT_MSG("Macroing:RING_MOVE(XMM)")
 #define RING_MOVE(_dst, _src)						\
 ({									\
 	__asm__ volatile						\
@@ -1802,38 +2219,4 @@ typedef union {
 		} Board;
 	};
 } SMBIOS_ST;
-
-#if defined(UBENCH) && UBENCH == 1
-#define UBENCH_DECLARE()						\
-static volatile unsigned long long uBenchCounter[3]			\
-					__attribute__ ((aligned(8))) = {\
-								0, 0, 0 \
-};									\
-inline static void UBENCH_RDCOUNTER_VOID(unsigned int idx) {}		\
-inline static void UBENCH_RDCOUNTER_INV(unsigned int idx)		\
-{									\
-	RDTSCP64(uBenchCounter[idx]);					\
-}									\
-inline static void UBENCH_RDCOUNTER_VAR(unsigned int idx)		\
-{									\
-	RDTSC64(uBenchCounter[idx]);					\
-}									\
-static void (*UBENCH_RDCOUNTER)(unsigned int) = UBENCH_RDCOUNTER_VOID;
-
-#define UBENCH_COMPUTE() (uBenchCounter[0] = uBenchCounter[2] - uBenchCounter[1])
-
-#define UBENCH_METRIC() (uBenchCounter[0])
-
-#define UBENCH_SETUP(architectureFlag)					\
-(									\
-	UBENCH_RDCOUNTER = ( architectureFlag ) ? UBENCH_RDCOUNTER_INV	\
-						: UBENCH_RDCOUNTER_VAR	\
-)
-#else
-#define UBENCH_DECLARE()	/* UBENCH_DECLARE() */
-#define UBENCH_RDCOUNTER(idx)	/* UBENCH_RDCOUNTER() */
-#define UBENCH_COMPUTE()	/* UBENCH_COMPUTE() */
-#define UBENCH_METRIC() 	/* UBENCH_METRIC() */
-#define UBENCH_SETUP(flag)	/* UBENCH_SETUP() */
-#endif /* UBENCH */
 

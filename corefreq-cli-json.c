@@ -1,5 +1,5 @@
 /*
- * CoreFreq (C) 2015-2019 CYRIL INGENIERIE
+ * CoreFreq (C) 2015-2020 CYRIL INGENIERIE
  * Contributors: Andrew Gurinovich ; CyrIng
  * Licenses: GPL2
  */
@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/types.h>
 #include <time.h>
 #include <errno.h>
@@ -26,8 +27,8 @@ double timespecFloat(struct timespec time)
 
 void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 {
-	unsigned i = 0, i2 = 0, i3 = 0;
-	unsigned int vendor = Shm->Proc.Features.Info.Vendor.CRC;
+	signed int i = 0, i2 = 0, i3 = 0;
+	unsigned int cpu, vendor = Shm->Proc.Features.Info.Vendor.CRC;
 	struct json_state s = {.depth = 0, .nested_state =
 		{}, .write = json_writer_stdout};
 	json_start_object(&s);
@@ -36,21 +37,35 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		json_start_object(&s);
 		json_key(&s, "Experimental");
 		json_literal(&s, "%d", Shm->Registration.Experimental);
-		json_key(&s, "hotplug");
-		json_literal(&s, "%d", Shm->Registration.hotplug);
-		json_key(&s, "pci");
-		json_literal(&s, "%d", Shm->Registration.pci);
-		json_key(&s, "nmi");
-		json_literal(&s, "%d", Shm->Registration.nmi);
+		json_key(&s, "HotPlug");
+		json_literal(&s, "%d", Shm->Registration.HotPlug);
+		json_key(&s, "PCI");
+		json_literal(&s, "%d", Shm->Registration.PCI);
+		json_key(&s, "Interrupt");
+		{
+			json_start_object(&s);
+			json_key(&s, "NMI_LOCAL");
+			json_literal(&s, "%u", BITVAL(Shm->Registration.NMI, BIT_NMI_LOCAL));
+			json_key(&s, "NMI_UNKNOWN");
+			json_literal(&s, "%u", BITVAL(Shm->Registration.NMI, BIT_NMI_UNKNOWN));
+			json_key(&s, "NMI_SERR");
+			json_literal(&s, "%u", BITVAL(Shm->Registration.NMI, BIT_NMI_SERR));
+			json_key(&s, "NMI_IO_CHECK");
+			json_literal(&s, "%u", BITVAL(Shm->Registration.NMI, BIT_NMI_IO_CHECK));
+			json_end_object(&s);
+		}
+		json_key(&s, "CPUidle");
+		json_literal(&s, "%hu", Shm->Registration.Driver.CPUidle);
+		json_key(&s, "CPUfreq");
+		json_literal(&s, "%hu", Shm->Registration.Driver.CPUfreq);
 		json_end_object(&s);
 	}
+    if (BITWISEAND(LOCKLESS, Shm->SysGate.Operation, 0x1))
+    {
 	json_key(&s, "SysGate");
 	{
 		json_start_object(&s);
-	/* TODO:
-		Bit64		Operation
-		IDLEDRIVER	IdleDriver;
-	*/
+
 		json_key(&s, "tickReset");
 		json_literal(&s, "%u", Shm->SysGate.tickReset);
 		json_key(&s, "tickStep");
@@ -132,9 +147,29 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		json_key(&s, "machine");
 		json_string(&s, Shm->SysGate.machine);
 
+		json_key(&s, "SubDriver");
+		{
+			json_start_object(&s);
+
+		    if (strlen(Shm->SysGate.OS.FreqDriver.Name) > 0) {
+			json_key(&s, "CPU_Freq");
+			json_string(&s, Shm->SysGate.OS.FreqDriver.Name);
+		    }
+		    if (strlen(Shm->SysGate.OS.FreqDriver.Governor) > 0) {
+			json_key(&s, "Governor");
+			json_string(&s, Shm->SysGate.OS.FreqDriver.Governor);
+		    }
+		    if (strlen(Shm->SysGate.OS.IdleDriver.Name) > 0) {
+			json_key(&s, "CPU_Idle");
+			json_string(&s, Shm->SysGate.OS.IdleDriver.Name);
+		    }
+
+			json_end_object(&s);
+		}
 
 		json_end_object(&s);
 	}
+    }
 	json_key(&s, "Sleep");
 	{
 		json_start_object(&s);
@@ -153,10 +188,17 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 
 	json_key(&s, "ShmName");
 	json_string(&s, Shm->ShmName);
-	json_key(&s, "AppSvr");
-	json_literal(&s, "%d", Shm->AppSvr);
-	json_key(&s, "AppCli");
-	json_literal(&s, "%d", Shm->AppCli);
+	json_key(&s, "App");
+	{
+		json_start_object(&s);
+		json_key(&s, "Svr");
+		json_literal(&s, "%d", Shm->App.Svr);
+		json_key(&s, "Cli");
+		json_literal(&s, "%d", Shm->App.Cli);
+		json_key(&s, "GUI");
+		json_literal(&s, "%d", Shm->App.GUI);
+		json_end_object(&s);
+	}
 	json_key(&s, "Uncore");
 	{
 		json_start_object(&s);
@@ -298,9 +340,7 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 	json_key(&s, "Proc");
 	{
 		json_start_object(&s);
-	/* TODO: CleanUp
-	 volatile unsigned long long	Sync __attribute__ ((aligned (16)));
-	*/
+
 		json_key(&s, "Features");
 		{
 			json_start_object(&s);
@@ -385,8 +425,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.SSSE3);
 					json_key(&s, "CNXT_ID");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.CNXT_ID);
-					json_key(&s, "Unused1");
-					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.Unused1);
+					json_key(&s, "SDBG");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.SDBG);
 					json_key(&s, "FMA");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.FMA);
 					json_key(&s, "CMPXCHG16B");
@@ -395,8 +435,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.xTPR);
 					json_key(&s, "PDCM");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.PDCM);
-					json_key(&s, "Unused2");
-					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.Unused2);
+					json_key(&s, "Unused1");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.Unused1);
 					json_key(&s, "PCID");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Std.ECX.PCID);
 					json_key(&s, "DCA");
@@ -596,6 +636,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.EAX.HWP_Flex);
 			json_key(&s, "HWP_Fast");
 			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.EAX.HWP_Fast);
+			json_key(&s, "HWFB_Cap");
+			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.EAX.HWFB_Cap);
 			json_key(&s, "HWP_Idle_SMT");
 			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.EAX.HWP_Idle);
 
@@ -615,7 +657,7 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.ECX.SETBH);
 						json_key(&s, "Unused2");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.ECX.Unused2);
-					} else if (vendor == CRC_AMD) {
+					} else if ((vendor == CRC_AMD) || (vendor == CRC_HYGON)) {
 						json_key(&s, "EffFreq");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.Power.ECX.EffFreq);
 						json_key(&s, "NotUsed");
@@ -712,6 +754,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EBX.AVX512BW);
 					json_key(&s, "AVX512VL");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EBX.AVX512VL);
+					json_key(&s, "AVX512_BF16");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature_Leaf1.EAX.AVX512_BF16);
 
 					json_end_object(&s);
 				}
@@ -728,17 +772,75 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.PKU);
 					json_key(&s, "OSPKE");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.OSPKE);
+					json_key(&s, "WAITPKG");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.WAITPKG);
+					json_key(&s, "AVX512_VBMI2");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.AVX512_VBMI2);
+					json_key(&s, "GFNI");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.GFNI);
+					json_key(&s, "VAES");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.VAES);
+					json_key(&s, "VPCLMULQDQ");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.VPCLMULQDQ);
+					json_key(&s, "AVX512_VNNI");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.AVX512_VNNI);
+					json_key(&s, "AVX512_BITALG");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.AVX512_BITALG);
+					json_key(&s, "AVX512_VPOPCNTDQ");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.AVX512_VPOPCNTDQ);
 					json_key(&s, "MAWAU");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.MAWAU);
 					json_key(&s, "RDPID");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.RDPID);
+					json_key(&s, "CLDEMOTE");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.CLDEMOTE);
+					json_key(&s, "MOVDIRI");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.MOVDIRI);
+					json_key(&s, "MOVDIR64B");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.MOVDIR64B);
+					json_key(&s, "ENQCMD");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.ENQCMD);
 					json_key(&s, "SGX_LC");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.ECX.SGX_LC);
 
 					json_end_object(&s);
 				}
 				json_key(&s, "EDX");
-				json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX);
+				{
+					json_start_object(&s);
+					json_key(&s, "AVX512_4VNNIW");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.AVX512_4VNNIW);
+					json_key(&s, "AVX512_4FMAPS");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.AVX512_4FMAPS);
+					json_key(&s, "Fast_Short_REP_MOV");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.FShort_REP_MOV);
+					json_key(&s, "AVX512_VP2INTERSECT");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.AVX512_VP2INTER);
+					json_key(&s, "MD_CLEAR");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.MD_CLEAR_Cap);
+					json_key(&s, "SERIALIZE");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.SERIALIZE);
+					json_key(&s, "Hybrid");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.Hybrid);
+					json_key(&s, "TSXLDTRK");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.TSXLDTRK);
+					json_key(&s, "PCONFIG");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.PCONFIG);
+					json_key(&s, "IBRS_IBPB");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.IBRS_IBPB_Cap);
+					json_key(&s, "STIBP");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.STIBP_Cap);
+					json_key(&s, "L1D_FLUSH");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.L1D_FLUSH_Cap);
+					json_key(&s, "IA32_ARCH_CAPABILITIES");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.IA32_ARCH_CAP);
+					json_key(&s, "IA32_CORE_CAPABILITIES");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.IA32_CORE_CAP);
+					json_key(&s, "SSBD");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.SSBD_Cap);
+
+					json_end_object(&s);
+				}
 
 				json_end_object(&s);
 			}
@@ -811,7 +913,7 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					if (vendor == CRC_INTEL) {
 						json_key(&s, "LahfSahf");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtInfo.ECX.LAHFSAHF);
-					} else if (vendor == CRC_AMD) {
+					} else if ((vendor == CRC_AMD) || (vendor == CRC_HYGON)) {
 						json_key(&s, "LahfSahf");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtInfo.ECX.LahfSahf);
 						json_key(&s, "MP_Mode");
@@ -899,7 +1001,7 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtInfo.EDX.IA64);
 						json_key(&s, "Unused5");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtInfo.EDX.Unused5);
-					} else if (vendor == CRC_AMD) {
+					} else if ((vendor == CRC_AMD) || (vendor == CRC_HYGON)) {
 						json_key(&s, "FPU");
 						json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtInfo.EDX.FPU);
 						json_key(&s, "VME");
@@ -1001,7 +1103,7 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					if (vendor == CRC_INTEL) {
 			json_key(&s, "Inv_TSC");
 			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.AdvPower.EDX.Inv_TSC);
-					} else if (vendor == CRC_AMD) {
+					} else if ((vendor == CRC_AMD) || (vendor == CRC_HYGON)) {
 			json_key(&s, "TS");
 			json_literal(&s, "%u", (unsigned) Shm->Proc.Features.AdvPower.EDX.TS);
 			json_key(&s, "FID");
@@ -1116,6 +1218,12 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			json_literal(&s, "%u", Shm->Proc.Features.TgtRatio_Unlock);
 			json_key(&s, "ClockRatio_Unlock");
 			json_literal(&s, "%u", Shm->Proc.Features.ClkRatio_Unlock);
+			json_key(&s, "Uncore_Unlock");
+			json_literal(&s, "%u", Shm->Proc.Features.Uncore_Unlock);
+			json_key(&s, "HWP_Enable");
+			json_literal(&s, "%u", Shm->Proc.Features.HWP_Enable);
+			json_key(&s, "HDC_Enable");
+			json_literal(&s, "%u", Shm->Proc.Features.HDC_Enable);
 			json_key(&s, "SpecTurboRatio");
 			json_literal(&s, "%u", Shm->Proc.Features.SpecTurboRatio);
 
@@ -1299,6 +1407,12 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		json_key(&s, "Power");
 		{
 			json_start_object(&s);
+			json_key(&s, "TDP");
+			json_literal(&s, "%u", Shm->Proc.Power.TDP);
+			json_key(&s, "Min");
+			json_literal(&s, "%u", Shm->Proc.Power.Min);
+			json_key(&s, "Max");
+			json_literal(&s, "%u", Shm->Proc.Power.Max);
 			json_key(&s, "Unit");
 			{
 				json_start_object(&s);
@@ -1320,18 +1434,46 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		json_key(&s, "Architecture");
 		json_string(&s, Shm->Proc.Architecture);
 
+		json_key(&s, "Mechanisms");
+		{
+			json_start_object(&s);
+			json_key(&s, "IBRS");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.IBRS);
+			json_key(&s, "STIBP");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.STIBP);
+			json_key(&s, "SSBD");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.SSBD);
+			json_key(&s, "L1DFL_VMENTRY_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.L1DFL_VMENTRY_NO);
+			json_key(&s, "RDCL_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.RDCL_NO);
+			json_key(&s, "IBRS_ALL");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.IBRS_ALL);
+			json_key(&s, "RSBA");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.RSBA);
+			json_key(&s, "SSB_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.SSB_NO);
+			json_key(&s, "MDS_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.MDS_NO);
+			json_key(&s, "PSCHANGE_MC_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.PSCHANGE_MC_NO);
+			json_key(&s, "TAA_NO");
+			json_literal(&s, "%llu", Shm->Proc.Mechanisms.TAA_NO);
 
+			json_end_object(&s);
+		}
 		json_end_object(&s);
 	}
 
 	json_key(&s, "Cpu");
 	json_start_arr(&s);
-	for (i = 0; (i < Shm->Proc.CPU.Count); i++) {
-	struct FLIP_FLOP *CFlop = &Shm->Cpu[i].FlipFlop[!Shm->Cpu[i].Toggle];
+	for (cpu = 0; (cpu < Shm->Proc.CPU.Count); cpu++)
+	{
+	struct FLIP_FLOP *CFlop = &Shm->Cpu[cpu].FlipFlop[!Shm->Cpu[cpu].Toggle];
 
 		json_start_object(&s);
 		json_key(&s, "OffLine");
-		json_literal(&s, "%llu", Shm->Cpu[i].OffLine);
+		json_literal(&s, "%llu", Shm->Cpu[cpu].OffLine);
 		json_key(&s, "Clock");
 		{
 			json_start_object(&s);
@@ -1344,30 +1486,32 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			json_end_object(&s);
 		}
 		json_key(&s, "Toggle");
-		json_literal(&s, "%u", Shm->Cpu[i].Toggle);
+		json_literal(&s, "%u", Shm->Cpu[cpu].Toggle);
 		/* TODO: ... Query */
 		json_key(&s, "Topology");
 		{
 			json_start_object(&s);
 			json_key(&s, "ApicID");
-			json_literal(&s, "%d", Shm->Cpu[i].Topology.ApicID);
-		    if (Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD) {
+			json_literal(&s, "%d", Shm->Cpu[cpu].Topology.ApicID);
+		    if((Shm->Proc.Features.Info.Vendor.CRC == CRC_AMD)
+		    || (Shm->Proc.Features.Info.Vendor.CRC == CRC_HYGON))
+		    {
 			json_key(&s, "CCX");
-			json_literal(&s, "%d", Shm->Cpu[i].Topology.MP.CCX);
+			json_literal(&s, "%d", Shm->Cpu[cpu].Topology.MP.CCX);
 		    }
 			json_key(&s, "CoreID");
-			json_literal(&s, "%d", Shm->Cpu[i].Topology.CoreID);
+			json_literal(&s, "%d", Shm->Cpu[cpu].Topology.CoreID);
 			json_key(&s, "ThreadID");
-			json_literal(&s, "%d", Shm->Cpu[i].Topology.ThreadID);
+			json_literal(&s, "%d", Shm->Cpu[cpu].Topology.ThreadID);
 			json_key(&s, "PackageID");
-			json_literal(&s, "%d", Shm->Cpu[i].Topology.PackageID);
+			json_literal(&s, "%d", Shm->Cpu[cpu].Topology.PackageID);
 			json_key(&s, "MP");
 			{
 				json_start_object(&s);
 				json_key(&s, "BSP");
-				json_literal(&s, "%d", Shm->Cpu[i].Topology.MP.BSP);
+				json_literal(&s, "%d", Shm->Cpu[cpu].Topology.MP.BSP);
 				json_key(&s, "x2APIC");
-				json_literal(&s, "%d", Shm->Cpu[i].Topology.MP.x2APIC);
+				json_literal(&s, "%d", Shm->Cpu[cpu].Topology.MP.x2APIC);
 				json_end_object(&s);
 			}
 			json_key(&s, "Cache");
@@ -1375,22 +1519,22 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			for (i2 = 0; i2 < CACHE_MAX_LEVEL; i2++) {
 				json_start_object(&s);
 				json_key(&s, "Set");
-				json_literal(&s, "%u", Shm->Cpu[i].Topology.Cache[i2].Set);
+				json_literal(&s, "%u", Shm->Cpu[cpu].Topology.Cache[i2].Set);
 				json_key(&s, "Size");
-				json_literal(&s, "%u", Shm->Cpu[i].Topology.Cache[i2].Size);
+				json_literal(&s, "%u", Shm->Cpu[cpu].Topology.Cache[i2].Size);
 				json_key(&s, "LineSz");
-				json_literal(&s, "%hu", Shm->Cpu[i].Topology.Cache[i2].LineSz);
+				json_literal(&s, "%hu", Shm->Cpu[cpu].Topology.Cache[i2].LineSz);
 				json_key(&s, "Part");
-				json_literal(&s, "%hu", Shm->Cpu[i].Topology.Cache[i2].Part);
+				json_literal(&s, "%hu", Shm->Cpu[cpu].Topology.Cache[i2].Part);
 				json_key(&s, "Way");
-				json_literal(&s, "%hu", Shm->Cpu[i].Topology.Cache[i2].Way);
+				json_literal(&s, "%hu", Shm->Cpu[cpu].Topology.Cache[i2].Way);
 				json_key(&s, "Feature");
 				{
 					json_start_object(&s);
 					json_key(&s, "WriteBack");
-					json_literal(&s, "%hu", Shm->Cpu[i].Topology.Cache[i2].Feature.WriteBack);
+					json_literal(&s, "%hu", Shm->Cpu[cpu].Topology.Cache[i2].Feature.WriteBack);
 					json_key(&s, "Inclusive");
-					json_literal(&s, "%hu", Shm->Cpu[i].Topology.Cache[i2].Feature.Inclusive);
+					json_literal(&s, "%hu", Shm->Cpu[cpu].Topology.Cache[i2].Feature.Inclusive);
 					json_end_object(&s);
 				}
 				json_end_object(&s);
@@ -1403,34 +1547,27 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		{
 			json_start_object(&s);
 			json_key(&s, "TM1");
-			json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.TM1);
+			json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.TM1);
 			json_key(&s, "TM2");
-			json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.TM2);
-			json_key(&s, "Target");
-			json_start_arr(&s);
-			{
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.Param.Offset[0]);
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.Param.Offset[1]);
-			}
-			json_end_arr(&s);
+			json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.TM2);
 			json_key(&s, "Limit");
 			json_start_arr(&s);
 			{
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.Limit[0]);
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.Limit[1]);
+				json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.Limit[SENSOR_LOWEST]);
+				json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.Limit[SENSOR_HIGHEST]);
 			}
 			json_end_arr(&s);
 			json_key(&s, "DutyCycle");
 			{
 				json_start_object(&s);
 				json_key(&s, "ClockMod");
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.DutyCycle.ClockMod);
+				json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.DutyCycle.ClockMod);
 				json_key(&s, "Extended");
-				json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.DutyCycle.Extended);
+				json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.DutyCycle.Extended);
 				json_end_object(&s);
 			}
 			json_key(&s, "PowerPolicy");
-			json_literal(&s, "%u", Shm->Cpu[i].PowerThermal.PowerPolicy);
+			json_literal(&s, "%u", Shm->Cpu[cpu].PowerThermal.PowerPolicy);
 			json_end_object(&s);
 		}
 		json_key(&s, "FlipFlop");
@@ -1441,78 +1578,85 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			{
 				json_start_object(&s);
 				json_key(&s, "INST");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.INST);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.INST);
 				json_key(&s, "C0");
 				{
 					json_start_object(&s);
 					json_key(&s, "UCC");
-					json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C0.UCC);
+					json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C0.UCC);
 					json_key(&s, "URC");
-					json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C0.URC);
+					json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C0.URC);
 					json_end_object(&s);
 				}
 				json_key(&s, "C3");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C3);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C3);
 				json_key(&s, "C6");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C6);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C6);
 				json_key(&s, "C7");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C7);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C7);
 				json_key(&s, "TSC");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.TSC);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.TSC);
 				json_key(&s, "C1");
-				json_literal(&s, "%llu", Shm->Cpu[i].FlipFlop[i2].Delta.C1);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].FlipFlop[i2].Delta.C1);
 				json_end_object(&s);
 			}
 			json_key(&s, "State");
 			{
 				json_start_object(&s);
 				json_key(&s, "IPS");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.IPS);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.IPS);
 				json_key(&s, "IPC");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.IPC);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.IPC);
 				json_key(&s, "CPI");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.CPI);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.CPI);
 				json_key(&s, "Turbo");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.Turbo);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.Turbo);
 				json_key(&s, "C0");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.C0);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.C0);
 				json_key(&s, "C3");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.C3);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.C3);
 				json_key(&s, "C6");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.C6);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.C6);
 				json_key(&s, "C7");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.C7);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.C7);
 				json_key(&s, "C1");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].State.C1);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].State.C1);
 				json_end_object(&s);
 			}
 			json_key(&s, "Relative");
 			{
 				json_start_object(&s);
 				json_key(&s, "Ratio");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].Relative.Ratio);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].Relative.Ratio);
 				json_key(&s, "Freq");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].Relative.Freq);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].Relative.Freq);
 				json_end_object(&s);
 			}
 			json_key(&s, "Thermal");
 			{
 				json_start_object(&s);
 				json_key(&s, "Sensor");
-				json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Thermal.Sensor);
+				json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Thermal.Sensor);
 				json_key(&s, "Temp");
-				json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Thermal.Temp);
+				json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Thermal.Temp);
 				json_key(&s, "Events");
-				json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Thermal.Events);
+				json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Thermal.Events);
+				json_key(&s, "Target");
+				json_start_arr(&s);
+				{
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Thermal.Param.Offset[0]);
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Thermal.Param.Offset[1]);
+				}
+				json_end_arr(&s);
 				json_end_object(&s);
 			}
 			json_key(&s, "Voltage");
 			{
 				json_start_object(&s);
 				json_key(&s, "VID");
-				json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Voltage.VID);
+				json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Voltage.VID);
 				json_key(&s, "Vcore");
-				json_literal(&s, "%f", Shm->Cpu[i].FlipFlop[i2].Voltage.Vcore);
+				json_literal(&s, "%f", Shm->Cpu[cpu].FlipFlop[i2].Voltage.Vcore);
 
 				json_end_object(&s);
 			}
@@ -1520,18 +1664,18 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			{
 				json_start_object(&s);
 				json_key(&s, "SMI");
-				json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Counter.SMI);
+				json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Counter.SMI);
 				json_key(&s, "NMI");
 				{
 					json_start_object(&s);
 					json_key(&s, "LOCAL");
-					json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Counter.NMI.LOCAL);
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Counter.NMI.LOCAL);
 					json_key(&s, "UNKNOWN");
-					json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Counter.NMI.UNKNOWN);
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Counter.NMI.UNKNOWN);
 					json_key(&s, "PCISERR");
-					json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Counter.NMI.PCISERR);
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Counter.NMI.PCISERR);
 					json_key(&s, "IOCHECK");
-					json_literal(&s, "%u", Shm->Cpu[i].FlipFlop[i2].Counter.NMI.IOCHECK);
+					json_literal(&s, "%u", Shm->Cpu[cpu].FlipFlop[i2].Counter.NMI.IOCHECK);
 					json_end_object(&s);
 				}
 				json_end_object(&s);
@@ -1544,17 +1688,17 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		{
 			json_start_object(&s);
 			json_key(&s, "RFLAGS");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.RFLAGS);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.RFLAGS);
 			json_key(&s, "CR0");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.CR0);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.CR0);
 			json_key(&s, "CR3");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.CR3);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.CR3);
 			json_key(&s, "CR4");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.CR4);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.CR4);
 			json_key(&s, "EFCR");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.EFCR);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.EFCR);
 			json_key(&s, "EFER");
-			json_literal(&s, "%llu", Shm->Cpu[i].SystemRegister.EFER);
+			json_literal(&s, "%llu", Shm->Cpu[cpu].SystemRegister.EFER);
 			json_end_object(&s);
 		}
 		json_key(&s, "CpuID");
@@ -1562,13 +1706,13 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 		for (i2 = 0; i2 < CPUID_MAX_FUNC; i2++) {
 			json_start_object(&s);
 			json_key(&s, "func");
-			json_literal(&s, "%u", Shm->Cpu[i].CpuID[i2].func);
+			json_literal(&s, "%u", Shm->Cpu[cpu].CpuID[i2].func);
 			json_key(&s, "sub");
-			json_literal(&s, "%u", Shm->Cpu[i].CpuID[i2].sub);
+			json_literal(&s, "%u", Shm->Cpu[cpu].CpuID[i2].sub);
 			json_key(&s, "reg");
 			json_start_arr(&s);
 			for (i3 = 0; i3 < 4; i3++) {
-				json_literal(&s, "%u", Shm->Cpu[i].CpuID[i2].reg[i3]);
+				json_literal(&s, "%u", Shm->Cpu[cpu].CpuID[i2].reg[i3]);
 			}
 			json_end_arr(&s);
 			json_end_object(&s);
@@ -1582,9 +1726,9 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			{
 				json_start_object(&s);
 				json_key(&s, "TSC");
-				json_literal(&s, "%llu", Shm->Cpu[i].Slice.Delta.TSC);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].Slice.Delta.TSC);
 				json_key(&s, "INST");
-				json_literal(&s, "%llu", Shm->Cpu[i].Slice.Delta.INST);
+				json_literal(&s, "%llu", Shm->Cpu[cpu].Slice.Delta.INST);
 				json_end_object(&s);
 			}
 			json_key(&s, "Counter");
@@ -1592,9 +1736,9 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 			for (i3 = 0; i3 < 3; i3++) {
 				json_start_object(&s);
 				json_key(&s, "TSC");
-				json_literal(&s, "%u", Shm->Cpu[i].Slice.Counter[i3].TSC);
+				json_literal(&s, "%u", Shm->Cpu[cpu].Slice.Counter[i3].TSC);
 				json_key(&s, "INST");
-				json_literal(&s, "%u", Shm->Cpu[i].Slice.Counter[i3].INST);
+				json_literal(&s, "%u", Shm->Cpu[cpu].Slice.Counter[i3].INST);
 				json_end_object(&s);
 			}
 			json_end_arr(&s);

@@ -1,6 +1,6 @@
 /*
  * CoreFreq
- * Copyright (C) 2015-2019 CYRIL INGENIERIE
+ * Copyright (C) 2015-2020 CYRIL INGENIERIE
  * Licenses: GPL2
  */
 
@@ -143,8 +143,11 @@ typedef union {
 #define SCANKEY_SHIFT_TAB	0x00000000005a5b1b
 #define SCANKEY_PGUP		0x000000007e355b1b
 #define SCANKEY_PGDW		0x000000007e365b1b
+#define SCANKEY_EXCL		0x0000000000000021
 #define SCANKEY_HASH		0x0000000000000023
-#define SCANKEY_PERCENT		0x0000000000000025
+#define SCANKEY_DOLLAR		0x0000000000000024
+#define SCANKEY_PERCENT 	0x0000000000000025
+#define SCANKEY_AST		0x000000000000002a
 #define SCANKEY_PLUS		0x000000000000002b
 #define SCANKEY_MINUS		0x000000000000002d
 #define SCANKEY_DOT		0x000000000000002e
@@ -152,8 +155,11 @@ typedef union {
 #define SCANKEY_SHIFT_DOWN	0x000042323b315b1b
 #define SCANKEY_SHIFT_RIGHT	0x000043323b315b1b
 #define SCANKEY_SHIFT_LEFT	0x000044323b315b1b
+#define SCANKEY_ALT_UP		0x000041333b315b1b
+#define SCANKEY_ALT_DOWN	0x000042333b315b1b
 #define SCANKEY_SHIFT_a 	0x0000000000000041
 #define SCANKEY_SHIFT_b 	0x0000000000000042
+#define SCANKEY_SHIFT_c 	0x0000000000000043
 #define SCANKEY_SHIFT_d 	0x0000000000000044
 #define SCANKEY_SHIFT_f 	0x0000000000000046
 #define SCANKEY_SHIFT_h 	0x0000000000000048
@@ -172,7 +178,13 @@ typedef union {
 #define SCANKEY_CTRL_p		0x0000000000000010
 #define SCANKEY_CTRL_u		0x0000000000000015
 #define SCANKEY_CTRL_x		0x0000000000000018
+#define SCANKEY_ALT_SHIFT_a	0x00000000000081c3
+#define SCANKEY_ALT_SHIFT_s	0x00000000000093c3
+#define SCANKEY_ALT_SHIFT_z	0x0000000000009ac3
+#define SCANKEY_ALT_a		0x000000000000a1c3
 #define SCANKEY_ALT_p		0x000000000000b0c3
+#define SCANKEY_ALT_s		0x000000000000b3c3
+#define SCANKEY_ALT_z		0x000000000000bac3
 #define SCANKEY_a		0x0000000000000061
 #define SCANKEY_b		0x0000000000000062
 #define SCANKEY_c		0x0000000000000063
@@ -207,7 +219,10 @@ typedef union {
 #define SCANCON_F3		0x00000000435b5b1b
 #define SCANCON_F4		0x00000000445b5b1b
 #define SCANCON_SHIFT_TAB	0x000000000000091b
+#define SCANCON_ALT_a		0x000000000000611b
 #define SCANCON_ALT_p		0x000000000000701b
+#define SCANCON_ALT_s		0x000000000000731b
+#define SCANCON_ALT_z		0x0000000000007a1b
 
 typedef struct {
 	int	width,
@@ -392,6 +407,29 @@ extern void Set_SINT(TGrid *pGrid	, signed int _SINT) ;
 			Set_SINT,					\
 	(void)0)))))))))))))(_pGrid, _data)
 
+typedef struct _Stock {
+	struct _Stock	*next;
+
+	unsigned long long id;
+
+	struct Geometry {
+		Coordinate origin;
+	} geometry;
+} Stock;
+
+typedef struct {
+	Stock	*head,
+		*tail;
+} StockList;
+
+typedef enum {
+	WINFLAG_NO_FLAGS = 0,
+	WINMASK_NO_STOCK = 0,
+	WINFLAG_NO_STOCK = 1,
+	WINMASK_NO_SCALE = 1,
+	WINFLAG_NO_SCALE = 2
+} WINDOW_FLAG;
+
 typedef struct _Win {
 	Layer		*layer;
 
@@ -416,6 +454,8 @@ typedef struct _Win {
 		void	(*WinRight)(struct _Win *win);
 		void	(*WinDown)(struct _Win *win);
 		void	(*WinUp)(struct _Win *win);
+		void	(*Shrink)(struct _Win *win);
+		void	(*Expand)(struct _Win *win);
 	    } key;
 
 	    struct {
@@ -427,6 +467,7 @@ typedef struct _Win {
 		char	*title;
 	} hook;
 
+	Stock		*stock;
 	Matrix		matrix;
 	TGrid		*grid;
 	size_t		dim;
@@ -434,8 +475,9 @@ typedef struct _Win {
 	struct {
 		size_t	rowLen,
 			titleLen;
-		CUINT	bottomRow;
 	} lazyComp;
+
+	WINDOW_FLAG	flag;
 } Window;
 
 typedef struct {
@@ -497,7 +539,7 @@ extern void HookPointer(REGPTR *with, REGPTR what) ;
 #define GridCall_2xArg(gridCall, updateFunc)				\
 ({									\
 	TGrid *pGrid = gridCall;					\
-	if(pGrid != NULL)						\
+	if (pGrid != NULL)						\
 	{								\
 		pGrid->Update = updateFunc;				\
 		pGrid->data.pvoid = NULL;				\
@@ -507,7 +549,7 @@ extern void HookPointer(REGPTR *with, REGPTR what) ;
 #define GridCall_3xArg(gridCall, updateFunc,	arg0)			\
 ({									\
 	TGrid *pGrid = gridCall;					\
-	if(pGrid != NULL)						\
+	if (pGrid != NULL)						\
 	{								\
 		pGrid->Update = updateFunc;				\
 		SET_DATA(pGrid, arg0);					\
@@ -542,14 +584,6 @@ extern void HookPointer(REGPTR *with, REGPTR what) ;
 #define TCellAt(win, col, row)						\
 	TGridAt(win, col, row).cell
 
-#define GetHead(list)		(list)->head
-#define SetHead(list, win)	GetHead(list) = win
-#define SetDead(list)		SetHead(list, NULL)
-#define IsHead(list, win)	(GetHead(list) == win)
-#define IsDead(list)		(GetHead(list) == NULL)
-#define IsCycling(win)		((win->next == win) && (win->prev == win))
-#define GetFocus(list)		GetHead(list)
-
 extern void DestroyLayer(Layer *layer) ;
 
 extern void CreateLayer(Layer *layer, CoordSize size) ;
@@ -579,8 +613,6 @@ extern void FreeAllTCells(Window *win) ;
   if (item != NULL)							\
   {									\
 	win->dim++;							\
-	win->lazyComp.bottomRow = (win->dim / win->matrix.size.wth)	\
-				- win->matrix.size.hth ;		\
 									\
 	win->grid = realloc(win->grid, sizeof(TGrid) * win->dim);	\
     if (win->grid != NULL)						\
@@ -608,9 +640,26 @@ extern void FreeAllTCells(Window *win) ;
 
 extern void DestroyWindow(Window *win) ;
 
-extern Window *CreateWindow(	Layer *layer, unsigned long long id,
+
+extern Window *CreateWindow_6xArg(Layer *layer, unsigned long long id,
 				CUINT width, CUINT height,
 				CUINT oCol, CUINT oRow) ;
+
+extern Window *CreateWindow_7xArg(Layer *layer, unsigned long long id,
+				CUINT width, CUINT height,
+				CUINT oCol, CUINT oRow, WINDOW_FLAG flag) ;
+
+#define DISPATCH_CreateWindow(_1,_2,_3,_4,_5,_6,_7, _CURSOR, ... ) _CURSOR
+
+#define CreateWindow(...)						\
+	DISPATCH_CreateWindow( __VA_ARGS__ ,				\
+				CreateWindow_7xArg ,			\
+				CreateWindow_6xArg ,			\
+				NULL,					\
+				NULL,					\
+				NULL,					\
+				NULL,					\
+				NULL)( __VA_ARGS__ )
 
 extern void RemoveWindow(Window *win, WinList *list) ;
 
@@ -618,19 +667,9 @@ extern void AppendWindow(Window *win, WinList *list) ;
 
 extern void DestroyAllWindows(WinList *list) ;
 
-#define RemoveWinList(win, list)					\
-({									\
-	win->prev->next = win->next;					\
-	win->next->prev = win->prev;					\
-})
+#define RemoveWinList(win, list)	RemoveNodeFromList(win, list)
 
-#define AppendWinList(win, list)					\
-({									\
-	win->prev = GetHead(list);					\
-	win->next = GetHead(list)->next;				\
-	GetHead(list)->next->prev = win;				\
-	GetHead(list)->next = win;					\
-})
+#define AppendWinList(win, list)	AppendNodeToList(win, list)
 
 extern void AnimateWindow(int rotate, WinList *list) ;
 
@@ -674,6 +713,14 @@ extern void MotionOriginRight_Win(Window *win) ;
 extern void MotionOriginUp_Win(Window *win) ;
 
 extern void MotionOriginDown_Win(Window *win) ;
+
+extern void MotionShrink_Win(Window *win) ;
+
+extern void MotionExpand_Win(Window *win) ;
+
+void MotionReScale(Window *win, WinList *list) ;
+
+extern void ReScaleAllWindows(WinList *list) ;
 
 extern int Motion_Trigger(SCANKEY *scan, Window *win, WinList *list) ;
 
@@ -795,4 +842,7 @@ extern void StopDump(void) ;
 extern __typeof__ (errno) StartDump(char *dumpFormat, int tickReset) ;
 extern void AbortDump(void) ;
 extern unsigned char DumpStatus(void) ;
+
+extern __typeof__ (errno) SaveGeometries(char*) ;
+extern __typeof__ (errno) LoadGeometries(char*) ;
 
