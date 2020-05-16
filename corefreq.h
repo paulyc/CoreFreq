@@ -6,11 +6,56 @@
 
 #define SHM_FILENAME	"corefreq-shm"
 
+#define SIG_RING_MS	(500 * 1000000LU)
+#define CHILD_PS_MS	(500 * 1000000LU)
+#define CHILD_TH_MS	(500 * 1000000LU)
+
+enum CHIPSET {
+	IC_CHIPSET,
+	IC_LAKEPORT,
+	IC_LAKEPORT_P,
+	IC_LAKEPORT_X,
+	IC_CALISTOGA,
+	IC_BROADWATER,
+	IC_CRESTLINE,
+	IC_CANTIGA,
+	IC_BEARLAKE_Q,
+	IC_BEARLAKE_P,
+	IC_BEARLAKE_QF,
+	IC_BEARLAKE_X,
+	IC_INTEL_3200,
+	IC_EAGLELAKE_Q,
+	IC_EAGLELAKE_P,
+	IC_EAGLELAKE_G,
+	IC_TYLERSBURG,
+	IC_IBEXPEAK,
+	IC_IBEXPEAK_M,
+	IC_COUGARPOINT,
+	IC_PATSBURG,
+	IC_CAVECREEK,
+	IC_WELLSBURG,
+	IC_PANTHERPOINT,
+	IC_PANTHERPOINT_M,
+	IC_LYNXPOINT,
+	IC_LYNXPOINT_M,
+	IC_WILDCATPOINT,
+	IC_WILDCATPOINT_M,
+	IC_SUNRISEPOINT,
+	IC_UNIONPOINT,
+	IC_CANNONPOINT,
+	IC_K8,
+	IC_ZEN,
+	CHIPSETS
+};
+
+/* Circular buffer							*/
+#define RING_SIZE	16
+
 typedef struct
 {
-	Bit64				OffLine __attribute__ ((aligned (8)));
+	Bit64				Toggle __attribute__ ((aligned (8)));
 
-	unsigned int			Toggle;
+	Bit64				OffLine __attribute__ ((aligned (8)));
 
 	struct
 	{
@@ -197,6 +242,8 @@ typedef struct
 {
 	volatile unsigned long long	Sync __attribute__ ((aligned (8)));
 
+	Bit64				Toggle __attribute__ ((aligned (8)));
+
 	FEATURES			Features;
 
 	Bit64			PowerNow	__attribute__ ((aligned (8)));
@@ -252,8 +299,6 @@ typedef struct
 					PM_version;
 
 	unsigned int			Top;
-
-	unsigned int			Toggle;
 
 	struct PKG_FLIP_FLOP {
 		struct {
@@ -331,7 +376,7 @@ typedef struct
 				Experimental,/* 0: Disable, 1: Enable	*/
 				HotPlug, /* < 0: Disable, Other: Enable */
 				PCI;	/*  < 0: Disable, other: Enable */
-		KERNEL_DRIVER	Driver;
+		KERNEL_DRIVER	Driver; /*0:Disable, 1:Enable, 2:Full-control*/
 	} Registration;
 
 	struct {
@@ -422,7 +467,106 @@ typedef struct
 	CPU_STRUCT		Cpu[];
 } SHM_STRUCT;
 
+/* Sensors formulas and definitions.
+  MIN = [SENSOR] > [TRIGGER] AND ([SENSOR] < [LOWEST] OR [LOWEST] <= [CAPPED])
+  MAX = [SENSOR] > [HIGHEST]
+*/
 
+#define THRESHOLD_LOWEST_CAPPED_THERMAL 	1
+#define THRESHOLD_LOWEST_CAPPED_VOLTAGE 	0.15
+#define THRESHOLD_LOWEST_CAPPED_ENERGY		0.0001
+#define THRESHOLD_LOWEST_CAPPED_POWER		0.0001
+#define THRESHOLD_LOWEST_TRIGGER_THERMAL	0
+#define THRESHOLD_LOWEST_TRIGGER_VOLTAGE	0.0
+#define THRESHOLD_LOWEST_TRIGGER_ENERGY 	0.0
+#define THRESHOLD_LOWEST_TRIGGER_POWER		0.0
+
+#define TEST_SENSOR_LOWEST(CLASS, TRIGGER, CAPPED, Sensor, Limit)	\
+	(Sensor > TRIGGER##CLASS) 					\
+	&& ((Sensor < Limit) || (Limit <= CAPPED##CLASS))
+
+#define TEST_SENSOR_HIGHEST(CLASS, TRIGGER, CAPPED, Sensor, Limit)	\
+	(Sensor > Limit)
+
+#define _TEST_SENSOR(CLASS, STAT, THRESHOLD, TRIGGER, CAPPED, Sensor, Limit) \
+	TEST_SENSOR_##STAT(CLASS, THRESHOLD##TRIGGER, THRESHOLD##CAPPED, \
+				Sensor, Limit)
+
+#define TEST_SENSOR(CLASS, STAT, Sensor, Limit) 			\
+	_TEST_SENSOR(CLASS, STAT, THRESHOLD_##STAT, _TRIGGER_, _CAPPED_, \
+			Sensor, Limit[SENSOR_##STAT])
+
+#define TEST_AND_SET_SENSOR(CLASS, STAT, Sensor, Limit) 		\
+({									\
+	if (TEST_SENSOR(CLASS, STAT, Sensor, Limit))			\
+	{								\
+		Limit[SENSOR_##STAT] = Sensor;				\
+	}								\
+})
+
+#define COMPUTE_THERMAL_INTEL(Temp, Param, Sensor)			\
+	(Temp = Param.Offset[0] - Param.Offset[1] - Sensor)
+
+#define COMPUTE_THERMAL_AMD(Temp, Param, Sensor)			\
+	/*( TODO )*/
+
+#define COMPUTE_THERMAL_AMD_0Fh(Temp, Param, Sensor)			\
+	(Temp = Sensor - (Param.Target * 2) - 49)
+
+#define COMPUTE_THERMAL_AMD_15h(Temp, Param, Sensor)			\
+	(Temp = Sensor * 5 / 40)
+
+#define COMPUTE_THERMAL_AMD_17h(Temp, Param, Sensor)			\
+	(Temp = ((Sensor * 5 / 40) - Param.Offset[1]) - Param.Offset[0])
+
+#define COMPUTE_THERMAL(_ARCH_, Temp, Param, Sensor)			\
+	COMPUTE_THERMAL_##_ARCH_(Temp, Param, Sensor)
+
+#define COMPUTE_VOLTAGE_INTEL_CORE2(Vcore, VID) 			\
+		(Vcore = 0.8875 + (double) (VID) * 0.0125)
+
+#define COMPUTE_VOLTAGE_INTEL_SNB(Vcore, VID) 				\
+		(Vcore = (double) (VID) / 8192.0)
+
+#define COMPUTE_VOLTAGE_INTEL_SKL_X(Vcore, VID) 			\
+		(Vcore = (double) (VID) / 8192.0)
+
+#define COMPUTE_VOLTAGE_AMD(Vcore, VID)					\
+		/*( TODO )*/
+
+#define COMPUTE_VOLTAGE_AMD_0Fh(Vcore, VID)				\
+({									\
+	short	Vselect =(VID & 0b110000) >> 4, Vnibble = VID & 0b1111; \
+									\
+	switch (Vselect) {						\
+	case 0b00:							\
+		Vcore = 1.550 - (double) (Vnibble) * 0.025;		\
+		break;							\
+	case 0b01:							\
+		Vcore = 1.150 - (double) (Vnibble) * 0.025;		\
+		break;							\
+	case 0b10:							\
+		Vcore = 0.7625 - (double) (Vnibble) * 0.0125;		\
+		break;							\
+	case 0b11:							\
+		Vcore = 0.5625 - (double) (Vnibble) * 0.0125;		\
+		break;							\
+	}								\
+})
+
+#define COMPUTE_VOLTAGE_AMD_15h(Vcore, VID)				\
+		(Vcore = 1.550 -(0.00625 * (double) (VID)))
+
+#define COMPUTE_VOLTAGE_AMD_17h(Vcore, VID)				\
+		(Vcore = 1.550 -(0.00625 * (double) (VID)))
+
+#define COMPUTE_VOLTAGE_WINBOND_IO(Vcore, VID)				\
+		(Vcore = (double) (VID) * 0.008)
+
+#define COMPUTE_VOLTAGE(_ARCH_, Vcore, VID)	\
+		COMPUTE_VOLTAGE_##_ARCH_(Vcore, VID)
+
+/* Error Reasons management.						*/
 enum REASON_CLASS {
 	RC_SUCCESS	= 0,
 	RC_CMD_SYNTAX	= 1,

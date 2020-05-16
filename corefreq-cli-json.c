@@ -360,6 +360,17 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_string(&s, Shm->Proc.Features.Info.Vendor.ID);
 					json_end_object(&s);
 				}
+				json_key(&s, "Hypervisor");
+				{
+					json_start_object(&s);
+					json_key(&s, "LargestHypFunc");
+					json_literal(&s, "%u", Shm->Proc.Features.Info.LargestHypFunc);
+					json_key(&s, "CRC");
+					json_literal(&s, "%u", Shm->Proc.Features.Info.Hypervisor.CRC);
+					json_key(&s, "ID");
+					json_string(&s, Shm->Proc.Features.Info.Hypervisor.ID);
+					json_end_object(&s);
+				}
 
 				json_end_object(&s);
 			}
@@ -822,6 +833,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.SERIALIZE);
 					json_key(&s, "Hybrid");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.Hybrid);
+					json_key(&s, "TSX_FORCE_ABORT");
+					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.TSX_FORCE_ABORT);
 					json_key(&s, "TSXLDTRK");
 					json_literal(&s, "%u", (unsigned) Shm->Proc.Features.ExtFeature.EDX.TSXLDTRK);
 					json_key(&s, "PCONFIG");
@@ -1229,6 +1242,8 @@ void JsonSysInfo(SHM_STRUCT *Shm, CELL_FUNC OutFunc)
 
 			json_end_object(&s);
 		}
+		json_key(&s, "HypervisorID");
+		json_literal(&s, "%llu", Shm->Proc.HypervisorID);
 		json_key(&s, "PowerNow");
 		json_literal(&s, "%llu", Shm->Proc.PowerNow);
 		json_key(&s, "Technology");

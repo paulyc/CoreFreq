@@ -215,6 +215,7 @@ enum {
 	RSC_FEATURES_LM,
 	RSC_FEATURES_LWP,
 	RSC_FEATURES_MCA,
+	RSC_FEATURES_MPX,
 	RSC_FEATURES_MSR,
 	RSC_FEATURES_MTRR,
 	RSC_FEATURES_NX,
@@ -228,12 +229,18 @@ enum {
 	RSC_FEATURES_PSE,
 	RSC_FEATURES_PSE36,
 	RSC_FEATURES_PSN,
+	RSC_FEATURES_RDT_PQE,
+	RSC_FEATURES_RDT_PQM,
 	RSC_FEATURES_RTM,
 	RSC_FEATURES_SMX,
 	RSC_FEATURES_SELF_SNOOP,
+	RSC_FEATURES_SMAP,
 	RSC_FEATURES_SMEP,
 	RSC_FEATURES_TSC,
 	RSC_FEATURES_TSC_DEADLN,
+	RSC_FEATURES_TSXABORT,
+	RSC_FEATURES_TSXLDTRK,
+	RSC_FEATURES_UMIP,
 	RSC_FEATURES_VME,
 	RSC_FEATURES_VMX,
 	RSC_FEATURES_X2APIC,
@@ -1481,8 +1488,8 @@ extern RESOURCE_ST Resource[];
 	HDK,HDK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,			\
 	HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,		\
 	HDK,HDK,LWK,HDK,HDK,HDK,HDK,LWK,				\
-	HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK,				\
-	LWK,HDK,HWK,LWK,HWK,HWK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK 	\
+	HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,				\
+	LWK,HDK,HWK,LWK,HWK,HWK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK 	\
 }
 
 #define RSC_LAYOUT_FOOTER_TECH_INTEL_CODE				\
@@ -1491,8 +1498,8 @@ extern RESOURCE_ST Resource[];
 	'T','U','R','B','O',',','C','1','E',',',			\
 	' ','P','M',',','C','3','A',',','C','1','A',',',		\
 	'C','3','U',',','C','1','U',',',				\
-	'T','M',',','H','O','T',']',' ',' ',				\
-	'V','[',' ','.',' ',' ',']',' ','T','[',' ',' ',' ',']' 	\
+	'T','M',',','H','O','T',']',' ',				\
+	'V','[',' ','.',' ',' ',']',' ','T','[',' ',' ',' ',' ',']' 	\
 }
 
 #define RSC_LAYOUT_FOOTER_TECH_AMD_ATTR 				\
@@ -1500,8 +1507,8 @@ extern RESOURCE_ST Resource[];
 	HDK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,LWK,		\
 	HDK,HDK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,		\
 	LWK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,HDK,HDK,HDK,LWK,		\
-	HDK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,		\
-	LWK,HDK,HWK,LWK,HWK,HWK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK 	\
+	HDK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,HDK,		\
+	LWK,HDK,HWK,LWK,HWK,HWK,HDK,HDK,LWK,HDK,HDK,HDK,HDK,HDK,HDK 	\
 }
 
 #define RSC_LAYOUT_FOOTER_TECH_AMD_CODE 				\
@@ -1509,8 +1516,8 @@ extern RESOURCE_ST Resource[];
 	'S','M','T',',','P','o','w','e','r','N','o','w',',',		\
 	'B','O','O','S','T',',','C','1','E',',','C','C','6',		\
 	',','P','C','6',',',' ','P','M',',','D','T','S',',',		\
-	'T','T','P',',','H','O','T',']',' ',' ',' ',' ',' ',		\
-	'V','[',' ','.',' ',' ',']',' ','T','[',' ',' ',' ',']' 	\
+	'T','T','P',',','H','O','T',']',' ',' ',' ',' ',		\
+	'V','[',' ','.',' ',' ',']',' ','T','[',' ',' ',' ',' ',']' 	\
 }
 
 #define RSC_LAYOUT_FOOTER_SYSTEM_ATTR					\
@@ -1597,7 +1604,7 @@ extern RESOURCE_ST Resource[];
 
 #define RSC_LAYOUT_CARD_RAM_ATTR					\
 {									\
-	HDK,HWK,HWK,HWK,HWK,HWK,LWK,HDK,HWK,HWK,LWK,HDK 		\
+	HDK,HWK,HWK,HWK,HWK,HWK,LWK,HDK,HWK,HWK,LDK,HDK 		\
 }
 
 #define RSC_LAYOUT_CARD_RAM_CODE					\

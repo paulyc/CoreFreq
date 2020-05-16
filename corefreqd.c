@@ -64,17 +64,13 @@ typedef struct {
 	SYSGATE			*SysGate;
 } REF;
 
-void Core_ComputeThermalLimits(CPU_STRUCT *Cpu, unsigned int Temp)
-{	/* Per Core, computes the Min and Max temperatures.		*/
-    if (((Cpu->PowerThermal.Limit[SENSOR_LOWEST] == 0) && (Temp != 0))
-    || ((Temp != 0) && (Temp < Cpu->PowerThermal.Limit[SENSOR_LOWEST])))
-    {
-	Cpu->PowerThermal.Limit[SENSOR_LOWEST] = Temp;
-    }
-    if (Temp > Cpu->PowerThermal.Limit[SENSOR_HIGHEST])
-    {
-	Cpu->PowerThermal.Limit[SENSOR_HIGHEST] = Temp;
-    }
+void Core_ComputeThermalLimits(CPU_STRUCT *Cpu, struct FLIP_FLOP *CFlip)
+{	/* Per Core, computes the Min temperature.			*/
+	TEST_AND_SET_SENSOR( THERMAL, LOWEST,	CFlip->Thermal.Temp,
+						Cpu->PowerThermal.Limit );
+	/* Per Core, computes the Max temperature.			*/
+	TEST_AND_SET_SENSOR( THERMAL, HIGHEST,	CFlip->Thermal.Temp,
+						Cpu->PowerThermal.Limit );
 }
 
 static inline void ComputeThermal_None( struct FLIP_FLOP *CFlip,
@@ -106,7 +102,7 @@ static inline void ComputeThermal_Intel(struct FLIP_FLOP *CFlip,
 			CFlip->Thermal.Param,
 			CFlip->Thermal.Sensor);
 
-	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip->Thermal.Temp);
+	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeThermal_Intel_PerSMT	ComputeThermal_Intel
@@ -151,7 +147,7 @@ static inline void ComputeThermal_AMD(	struct FLIP_FLOP *CFlip,
 			CFlip->Thermal.Param,
 			CFlip->Thermal.Sensor);
 
-	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip->Thermal.Temp);
+	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeThermal_AMD_PerSMT	ComputeThermal_AMD
@@ -196,7 +192,7 @@ static inline void ComputeThermal_AMD_0Fh(	struct FLIP_FLOP *CFlip,
 			CFlip->Thermal.Param,
 			CFlip->Thermal.Sensor);
 
-	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip->Thermal.Temp);
+	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeThermal_AMD_0Fh_PerSMT	ComputeThermal_AMD_0Fh
@@ -243,7 +239,7 @@ static inline void ComputeThermal_AMD_15h(	struct FLIP_FLOP *CFlip,
 			CFlip->Thermal.Param,
 			CFlip->Thermal.Sensor);
 
-	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip->Thermal.Temp);
+	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip);
     }
 }
 
@@ -288,7 +284,7 @@ static inline void ComputeThermal_AMD_17h(	struct FLIP_FLOP *CFlip,
 			CFlip->Thermal.Param,
 			CFlip->Thermal.Sensor);
 
-	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip->Thermal.Temp);
+	Core_ComputeThermalLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeThermal_AMD_17h_PerSMT	ComputeThermal_AMD_17h
@@ -324,17 +320,13 @@ static void (*ComputeThermal_AMD_17h_Matrix[4])(struct FLIP_FLOP*,
 	[FORMULA_SCOPE_PKG ] = ComputeThermal_AMD_17h_PerPkg
 };
 
-void Core_ComputeVoltageLimits(CPU_STRUCT *Cpu, double Vcore)
-{	/* Per Core, computes the Min and Max CPU voltage.		*/
-    if (((Cpu->Sensors.Voltage.Limit[SENSOR_LOWEST] == 0) && (Vcore != 0))
-    || ((Vcore != 0) && (Vcore < Cpu->Sensors.Voltage.Limit[SENSOR_LOWEST])))
-    {
-	Cpu->Sensors.Voltage.Limit[SENSOR_LOWEST] = Vcore;
-    }
-    if (Vcore > Cpu->Sensors.Voltage.Limit[SENSOR_HIGHEST])
-    {
-	Cpu->Sensors.Voltage.Limit[SENSOR_HIGHEST] = Vcore;
-    }
+void Core_ComputeVoltageLimits(CPU_STRUCT *Cpu, struct FLIP_FLOP *CFlip)
+{	/* Per Core, computes the Min CPU voltage.			*/
+	TEST_AND_SET_SENSOR( VOLTAGE, LOWEST,	CFlip->Voltage.Vcore,
+						Cpu->Sensors.Voltage.Limit );
+	/* Per Core, computes the Max CPU voltage.			*/
+	TEST_AND_SET_SENSOR( VOLTAGE, HIGHEST,	CFlip->Voltage.Vcore,
+						Cpu->Sensors.Voltage.Limit );
 }
 
 static inline void ComputeVoltage_None( struct FLIP_FLOP *CFlip,
@@ -367,7 +359,7 @@ static inline void ComputeVoltage_Intel_Core2( struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_Intel_Core2_PerSMT	ComputeVoltage_Intel_Core2
@@ -411,7 +403,7 @@ static inline void ComputeVoltage_Intel_SNB(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_Intel_SNB_PerSMT 	ComputeVoltage_Intel_SNB
@@ -455,7 +447,7 @@ static inline void ComputeVoltage_Intel_SKL_X( struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_Intel_SKL_X_PerSMT	ComputeVoltage_Intel_SKL_X
@@ -499,7 +491,7 @@ static inline void ComputeVoltage_AMD(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_AMD_PerSMT	ComputeVoltage_AMD
@@ -543,7 +535,7 @@ static inline void ComputeVoltage_AMD_0Fh(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_AMD_0Fh_PerSMT	ComputeVoltage_AMD_0Fh
@@ -587,7 +579,7 @@ static inline void ComputeVoltage_AMD_15h(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_AMD_15h_PerSMT	ComputeVoltage_AMD_15h
@@ -631,7 +623,7 @@ static inline void ComputeVoltage_AMD_17h(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_AMD_17h_PerSMT	ComputeVoltage_AMD_17h
@@ -675,7 +667,7 @@ static inline void ComputeVoltage_Winbond_IO(	struct FLIP_FLOP *CFlip,
 			CFlip->Voltage.Vcore,
 			CFlip->Voltage.VID);
 
-	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip->Voltage.Vcore);
+	Core_ComputeVoltageLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputeVoltage_Winbond_IO_PerSMT	ComputeVoltage_Winbond_IO
@@ -711,20 +703,19 @@ static void (*ComputeVoltage_Winbond_IO_Matrix[4])(	struct FLIP_FLOP*,
 	[FORMULA_SCOPE_PKG ] = ComputeVoltage_Winbond_IO_PerPkg
 };
 
-void Core_ComputePowerLimits(CPU_STRUCT *Cpu, double Energy, double Power)
-{	/* Per Core, computes the Min and Max CPU energy & power consumed. */
-	if (Energy && Energy < Cpu->Sensors.Energy.Limit[SENSOR_LOWEST]) {
-		Cpu->Sensors.Energy.Limit[SENSOR_LOWEST] = Energy;
-	}
-	if (Energy > Cpu->Sensors.Energy.Limit[SENSOR_HIGHEST]) {
-		Cpu->Sensors.Energy.Limit[SENSOR_HIGHEST] = Energy;
-	}
-	if (Power && Power < Cpu->Sensors.Power.Limit[SENSOR_LOWEST]) {
-		Cpu->Sensors.Power.Limit[SENSOR_LOWEST] = Power;
-	}
-	if (Power > Cpu->Sensors.Power.Limit[SENSOR_HIGHEST]) {
-		Cpu->Sensors.Power.Limit[SENSOR_HIGHEST] = Power;
-	}
+void Core_ComputePowerLimits(CPU_STRUCT *Cpu, struct FLIP_FLOP *CFlip)
+{	/* Per Core, computes the Min CPU Energy consumed.		*/
+	TEST_AND_SET_SENSOR( ENERGY, LOWEST,	CFlip->State.Energy,
+						Cpu->Sensors.Energy.Limit );
+	/* Per Core, computes the Max CPU Energy consumed.		*/
+	TEST_AND_SET_SENSOR( ENERGY, HIGHEST,	CFlip->State.Energy,
+						Cpu->Sensors.Energy.Limit );
+	/* Per Core, computes the Min CPU Power consumed.		*/
+	TEST_AND_SET_SENSOR( POWER, LOWEST,	CFlip->State.Power,
+						Cpu->Sensors.Power.Limit);
+	/* Per Core, computes the Max CPU Power consumed.		*/
+	TEST_AND_SET_SENSOR( POWER, HIGHEST,	CFlip->State.Power,
+						Cpu->Sensors.Power.Limit );
 }
 
 static inline void ComputePower_None(	struct FLIP_FLOP *CFlip,
@@ -763,9 +754,7 @@ static inline void ComputePower_AMD_17h(struct FLIP_FLOP *CFlip,
 	CFlip->State.Power	= (1000.0 * CFlip->State.Energy)
 				/ (double) Shm->Sleep.Interval;
 
-	Core_ComputePowerLimits(&Shm->Cpu[cpu],
-				CFlip->State.Energy,
-				CFlip->State.Power);
+	Core_ComputePowerLimits(&Shm->Cpu[cpu], CFlip);
 }
 
 #define ComputePower_AMD_17h_PerSMT	ComputePower_AMD_17h
@@ -4018,6 +4007,14 @@ void Topology(SHM_STRUCT *Shm, PROC *Proc, CORE **Core, unsigned int cpu)
 		break;
 	}
 	/* Fallthrough */
+    case AMD_Zen:
+    case AMD_Zen_APU:
+    case AMD_ZenPlus:
+    case AMD_ZenPlus_APU:
+    case AMD_EPYC_Rome:
+    case AMD_Zen2_CPK:
+    case AMD_Zen2_APU:
+    case AMD_Zen2_MTS:
     case AMD_Family_17h:
     case AMD_Family_18h:
 	/* CPUID_Fn80000006_EDX: Value in [3FFFh - 0001h] = (<Value> *0.5) MB */
@@ -4661,7 +4658,7 @@ static inline void Pkg_ComputeVoltage_Intel_SNB(CPU_STRUCT *Cpu,
 			SProc->Voltage.Vcore,
 			SProc->Voltage.VID);
 
-	Core_ComputeVoltageLimits(Cpu, SProc->Voltage.Vcore);
+	Core_ComputeVoltageLimits(Cpu, SProc);
 }
 
 #define Pkg_ComputeVoltage_Intel_SKL_X	Pkg_ComputeVoltage_None
@@ -4681,41 +4678,7 @@ static inline void Pkg_ComputeVoltage_Winbond_IO(CPU_STRUCT *Cpu,
 			SProc->Voltage.Vcore,
 			SProc->Voltage.VID);
 
-	Core_ComputeVoltageLimits(Cpu, SProc->Voltage.Vcore);
-}
-
-#define Pkg_ComputePowerLimits(pw)					\
-{ /* Package scope, computes Min and Max CPU energy & power consumed. */\
-    if ( ( (Shm->Proc.State.Energy[pw].Limit[SENSOR_LOWEST] == 0)	\
-	&& (Shm->Proc.State.Energy[pw].Current != 0) )			\
-    || ( (Shm->Proc.State.Energy[pw].Current != 0)			\
-	&& (Shm->Proc.State.Energy[pw].Current				\
-		< Shm->Proc.State.Energy[pw].Limit[SENSOR_LOWEST]) ) )	\
-    {									\
-	Shm->Proc.State.Energy[pw].Limit[SENSOR_LOWEST] =		\
-				Shm->Proc.State.Energy[pw].Current;	\
-    }									\
-    if (Shm->Proc.State.Energy[pw].Current				\
-	> Shm->Proc.State.Energy[pw].Limit[SENSOR_HIGHEST])		\
-    {									\
-	Shm->Proc.State.Energy[pw].Limit[SENSOR_HIGHEST] =		\
-				Shm->Proc.State.Energy[pw].Current;	\
-    }									\
-    if ( ( (Shm->Proc.State.Power[pw].Limit[SENSOR_LOWEST] == 0)	\
-	&& (Shm->Proc.State.Power[pw].Current != 0) )			\
-    || ( (Shm->Proc.State.Power[pw].Current != 0)			\
-	&& (Shm->Proc.State.Power[pw].Current				\
-		< Shm->Proc.State.Power[pw].Limit[SENSOR_LOWEST]) ) )	\
-    {									\
-	Shm->Proc.State.Power[pw].Limit[SENSOR_LOWEST] =		\
-				Shm->Proc.State.Power[pw].Current;	\
-    }									\
-    if (Shm->Proc.State.Power[pw].Current				\
-	> Shm->Proc.State.Power[pw].Limit[SENSOR_HIGHEST])		\
-    {									\
-	Shm->Proc.State.Power[pw].Limit[SENSOR_HIGHEST] =		\
-				Shm->Proc.State.Power[pw].Current;	\
-    }									\
+	Core_ComputeVoltageLimits(Cpu, SProc);
 }
 
 static inline void Pkg_ComputePower_None(PROC *Proc, struct FLIP_FLOP *CFlop)
@@ -5027,7 +4990,22 @@ REASON_CODE Core_Manager(REF *Ref)
 				(1000.0 * Shm->Proc.State.Energy[pw].Current)
 						/ (double) Shm->Sleep.Interval;
 
-		Pkg_ComputePowerLimits(pw);
+		/* Processor scope: computes Min and Max energy consumed. */
+		TEST_AND_SET_SENSOR(	ENERGY, LOWEST,
+					Shm->Proc.State.Energy[pw].Current,
+					Shm->Proc.State.Energy[pw].Limit );
+
+		TEST_AND_SET_SENSOR(	ENERGY, HIGHEST,
+					Shm->Proc.State.Energy[pw].Current,
+					Shm->Proc.State.Energy[pw].Limit );
+		/* Processor scope: computes Min and Max power consumed. */
+		TEST_AND_SET_SENSOR(	POWER, LOWEST,
+					Shm->Proc.State.Power[pw].Current,
+					Shm->Proc.State.Power[pw].Limit );
+
+		TEST_AND_SET_SENSOR(	POWER, HIGHEST,
+					Shm->Proc.State.Power[pw].Current,
+					Shm->Proc.State.Power[pw].Limit );
 	    }
 		/* Package thermal formulas				*/
 	    if (Shm->Proc.Features.Power.EAX.PTM) {
@@ -5211,7 +5189,6 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc, uid_t uid, uid_t gid, mode_t cmask)
 		Shm->Sleep.sliceWaiting = TIMESPEC(CHILD_TH_MS);
 
 		REF Ref = {
-			.Signal		= {{0}},
 			.CPID		= -1,
 			.KID		= 0,
 			.Started	= 0,
@@ -5223,6 +5200,7 @@ REASON_CODE Shm_Manager(FD *fd, PROC *Proc, uid_t uid, uid_t gid, mode_t cmask)
 			.Core		= Core,
 			.SysGate	= NULL
 		};
+		sigemptyset(&Ref.Signal);
 
 		Package_Update(Shm, Proc);
 		Uncore(Shm, Proc, Core[Proc->Service.Core]);
